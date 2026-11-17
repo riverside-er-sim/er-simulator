@@ -43,8 +43,8 @@ window.CASE_EXTRAS['c-trauma-spleen-01'] = {
     ct_abd: { useful: true, report: 'Deep laceration of an enlarged spleen with a large amount of blood around it. Liver and kidneys intact. Two left lower rib fractures.' },
     cxr: { useful: true, report: 'Fractures of two left lower ribs. No collapsed lung and no blood around the lungs. Heart and middle of the chest look normal.' },
     ct_head: { useful: false, why: 'He wore a helmet, never lost consciousness, and is fully alert with a normal neurological exam, so a head scan adds radiation without changing his care.' },
-    mri: { useful: false, why: 'An MRI takes far too long for a patient who may be bleeding inside; ultrasound and a quick CT answer the question.' },
-    dimer: { useful: false, why: 'D-dimer is raised after any injury or bleeding, so it tells you nothing useful here.' }
+    mri: { useful: false, report: 'Torn, enlarged spleen with blood around it — the same answer a CT gives much faster.', why: 'An MRI takes far too long for a patient who may be bleeding inside; ultrasound and a quick CT answer the question.' },
+    dimer: { useful: false, results: [ { name: 'D-dimer', value: 'Raised', flag: 'H', ref: 'Negative' } ], why: 'D-dimer is raised after any injury or bleeding, so it tells you nothing useful here.' }
   },
   talk: {
     afterDecision: 4,
@@ -58,7 +58,7 @@ window.CASE_EXTRAS['c-trauma-spleen-01'] = {
       { text: 'Tell him that young people always recover well, so he doesn’t need to worry about anything at all, and the surgeons will take care of everything for him.', correct: false,
         feedback: 'False reassurance skips over real risks and leaves him unprepared; patients deserve honest information.' },
       { text: 'Agree to keep trying more blood for a few hours to see if the bleeding stops on its own, since he feels nervous.', correct: false,
-        feedback: 'He has already only briefly responded to blood; delaying surgery to avoid an uncomfortable talk puts his life at risk.' },
+        feedback: 'He has responded only briefly to blood; delaying surgery to avoid an uncomfortable talk puts his life at risk.' },
       { text: 'Say the surgeons have already made the decision, so there is no point discussing it further, and ask him to sign the form.', correct: false,
         feedback: 'Shutting down questions removes his say in his own care and increases fear and mistrust.' }
     ]
@@ -93,7 +93,7 @@ window.CASE_EXTRAS['c-trauma-headbleed-01'] = {
       { name: 'Blood group', value: 'A positive', flag: '', ref: '—' },
       { name: 'Antibody screen', value: 'Negative', flag: '', ref: 'Negative' }
     ] },
-    mri: { useful: false, why: 'CT finds bleeding faster and is easier to get in an emergency; an MRI would delay the answer.' },
+    mri: { useful: false, report: 'Thin layer of blood over the right side of the brain — the same answer the CT gives more quickly.', why: 'CT finds bleeding faster and is easier to get in an emergency; an MRI would delay the answer.' },
     cxr: { useful: false, why: 'She has no chest pain, cough or breathing problems, so a chest X-ray does not help with a head injury.' },
     xr_limb: { useful: false, why: 'She has no limb pain or swelling, and the real danger here is inside the head, not in her bones.' }
   },
@@ -104,7 +104,7 @@ window.CASE_EXTRAS['c-trauma-headbleed-01'] = {
     situation: 'You explain the scan found a small bleed. She frowns: "It’s only a tiny one, and I feel perfectly well. My cat hasn’t been fed since this morning — can’t I come back tomorrow?"',
     question: 'How do you respond?',
     options: [
-      { text: 'Explain bleeds on a blood thinner can grow even when you feel fine, so she must stay; her daughter can feed the cat.', correct: true,
+      { text: 'Explain a bleed on a blood thinner can grow even if she feels fine, so she should stay; ask if her daughter can feed the cat.', correct: true,
         feedback: 'You take her worry seriously, explain the real risk simply, and solve the practical problem that is keeping her from staying.' },
       { text: 'Let her go home if she promises to come straight back tomorrow morning, since she is alert and seems well.', correct: false,
         feedback: 'Looking well does not mean the bleed is safe; she needs reversal of her blood thinner and close watching in hospital.' },
@@ -121,7 +121,7 @@ window.CASE_EXTRAS['c-trauma-headbleed-01'] = {
 // ---------------------------------------------------------------------------
 window.CASE_EXTRAS['c-ortho-hip-01'] = {
   esi: 2,
-  esiWhy: 'She is in severe pain after an unexplained fall with hours on the floor, and an older adult with a possible blackout and a slow pulse should not wait.',
+  esiWhy: 'She is 84, in severe pain with a likely broken hip after an unexplained fall and hours on the floor, which is high risk in an older adult, so she should not wait.',
   tests: {
     xr_limb: { useful: true, report: 'Displaced fracture of the right femoral neck (the top of the thigh bone at the hip). The bones look thin, in keeping with osteoporosis.', image: 'xr-hip-fracture' },
     ecg: { useful: true, report: 'Slow but regular rhythm (sinus bradycardia) at about 52 beats per minute. No heart block and no signs of a heart attack.', image: 'ecg-sinus-brady',
@@ -148,9 +148,9 @@ window.CASE_EXTRAS['c-ortho-hip-01'] = {
       { name: 'Blood group', value: 'A positive', flag: '', ref: '—' },
       { name: 'Antibody screen', value: 'Negative', flag: '', ref: 'Negative' }
     ] },
-    mri: { useful: false, why: 'The X-ray already clearly shows the fracture, so an MRI would only add delay before surgery.' },
+    mri: { useful: false, report: 'Broken right hip (femoral neck), as already seen on the X-ray.', why: 'The X-ray already clearly shows the fracture, so an MRI would only add delay before surgery.' },
     ct_abd: { useful: false, why: 'She has no belly pain or tenderness; scanning her abdomen adds radiation without answering any question.' },
-    dimer: { useful: false, why: 'D-dimer is almost always raised after a fracture and a long lie, so it cannot tell you anything useful here.' }
+    dimer: { useful: false, results: [ { name: 'D-dimer', value: 'Raised', flag: 'H', ref: 'Negative' } ], why: 'D-dimer is almost always raised after a fracture and a long lie, so it cannot tell you anything useful here.' }
   },
   talk: {
     afterDecision: 3,
@@ -192,7 +192,7 @@ window.CASE_EXTRAS['c-peds-croup-01'] = {
     question: 'How do you respond?',
     options: [
       { text: 'Explain croup is often worse at night and describe when to come back, like noisy breathing at rest or pulling in.', correct: true,
-        feedback: 'You normalise what may happen, give clear warning signs, and back it up in writing so she feels able to cope.' },
+        feedback: 'You normalise what may happen and give clear warning signs, so she feels able to cope and knows when to return.' },
       { text: 'Reassure her that croup is never dangerous, so there is no reason to come back even if the noise returns tonight.', correct: false,
         feedback: 'Croup can occasionally become severe; parents need clear return advice, not false reassurance.' },
       { text: 'Suggest he stays in hospital overnight just in case, since explaining all the warning signs to a worried parent takes a long time.', correct: false,
@@ -226,7 +226,7 @@ window.CASE_EXTRAS['c-peds-intuss-01'] = {
       { name: 'Platelets', value: '386 ×10⁹/L', flag: '', ref: '150–450' }
     ] },
     lactate: { useful: true, results: [ { name: 'Lactate', value: '1.9 mmol/L', flag: '', ref: '0.5–2.0' } ] },
-    ct_abd: { useful: false, why: 'Ultrasound diagnoses intussusception without radiation; a CT gives a baby a large radiation dose and may need sedation.' },
+    ct_abd: { useful: false, report: 'Bowel telescoped into itself in the right upper belly (intussusception) — the same answer an ultrasound gives without radiation.', why: 'Ultrasound diagnoses intussusception without radiation; a CT gives a baby a large radiation dose and may need sedation.' },
     xr_abd: { useful: false, why: 'A plain belly X-ray often looks normal in intussusception, so it cannot rule it in or out and only adds radiation.' },
     cultures: { useful: false, why: 'He has no fever and the story points to a bowel blockage, not a bloodstream infection.' }
   },
@@ -309,8 +309,10 @@ window.CASE_EXTRAS['d-cardio-dissection-01'] = {
       { name: 'Blood group', value: 'B positive', flag: '', ref: '—' },
       { name: 'Crossmatched red cell units', value: 'Ready for theatre', flag: '', ref: '—' }
     ] },
-    dimer: { useful: false, why: 'It would probably be raised, but it cannot confirm a dissection; his high-risk features already mean he needs a CT now.' },
-    mri: { useful: false, why: 'An MRI takes too long and moves a high-risk patient far from the resus team; CT gives the answer in minutes.' }
+    echo: { useful: true, report: 'The first part of the aorta is widened, with a flap from the tear seen inside it. Small amount of fluid around the heart; the heart squeezes normally.',
+      stages: [ { from: 4, report: 'More fluid around the heart than before, beginning to squeeze the heart. The first part of the aorta is widened with a flap inside it.' } ] },
+    dimer: { useful: false, results: [ { name: 'D-dimer', value: 'Raised', flag: 'H', ref: 'Negative' } ], why: 'It would probably be raised, but it cannot confirm a dissection; his high-risk features already mean he needs a CT now.' },
+    mri: { useful: false, report: 'Tear in the wall of the aorta just above the heart — the same answer the CT gives in minutes.', why: 'An MRI takes too long and moves a high-risk patient far from the resus team; CT gives the answer in minutes.' }
   },
   talk: {
     afterDecision: 3,
@@ -346,7 +348,7 @@ window.CASE_EXTRAS['d-cardio-syncope-01'] = {
     dimer: { useful: false, why: 'Nothing suggests a blood clot, and a D-dimer could give a false alarm that leads to unnecessary scans.' }
   },
   talk: {
-    afterDecision: 2,
+    afterDecision: 3,
     who: 'The patient',
     title: 'Is something wrong with my heart?',
     situation: 'After her ECG, she looks worried. "My friend said people can just drop dead from heart problems. Is that what happened to me? Is my heart broken?"',
@@ -376,11 +378,12 @@ window.CASE_EXTRAS['d-resp-pneumothorax-01'] = {
         { from: 3, report: 'Very large left pneumothorax with the heart and windpipe pushed to the right (tension). This must be treated immediately, without waiting for imaging.', image: 'cxr-pneumothorax-left' },
         { from: 4, report: 'Chest drain in place on the left. The left lung has re-expanded. Windpipe back in the middle.', image: 'cxr-normal' }
       ] },
-    us_bedside: { useful: true, report: 'No normal lung sliding on the left side, which fits air around the lung. Normal lung sliding on the right.' },
+    us_bedside: { useful: true, report: 'No normal lung sliding on the left side, which fits air around the lung. Normal lung sliding on the right.',
+      stages: [ { from: 4, report: 'Lung sliding has returned on the left with the chest drain in place. Normal lung sliding on the right.' } ] },
     ecg: { useful: true, report: 'Sinus tachycardia at about 98 beats per minute, otherwise normal.', image: 'ecg-sinus-tach',
       stages: [ { from: 3, report: 'Sinus tachycardia at about 128 beats per minute. No signs of a heart attack.', image: 'ecg-sinus-tach' },
                 { from: 4, report: 'Normal sinus rhythm. Rate back to normal.', image: 'ecg-normal' } ] },
-    ct_chest: { useful: false, why: 'The chest X-ray already shows the collapsed lung clearly, so a CT adds radiation and delay.' },
+    ct_chest: { useful: false, report: 'Large collapsed left lung with air around it — the same answer the chest X-ray already gave.', why: 'The chest X-ray already shows the collapsed lung clearly, so a CT adds radiation and delay.' },
     dimer: { useful: false, why: 'His story and exam point to a collapsed lung, and he has no clot risk factors, so a D-dimer could only mislead.' },
     abg: { useful: false, why: 'The finger probe shows his oxygen level; a painful arterial test would not change treatment.' }
   },
@@ -425,7 +428,7 @@ window.CASE_EXTRAS['d-neuro-sah-01'] = {
     ] },
     glucose: { useful: true, results: [ { name: 'Glucose (finger-prick)', value: '112 mg/dL', flag: 'H', ref: '70–110' } ] },
     ecg: { useful: true, report: 'Normal sinus rhythm. Some mild T-wave changes, which can be seen after bleeding around the brain. No heart attack pattern.' },
-    mri: { useful: false, why: 'MRI is slower and harder to get in an emergency; CT, then a lumbar puncture and a CT angiogram, answer the question faster.' },
+    mri: { useful: false, report: 'A small amount of blood in the fluid spaces around the brain — slower to get than the CT and lumbar puncture.', why: 'MRI is slower and harder to get in an emergency; CT, then a lumbar puncture and a CT angiogram, answer the question faster.' },
     cultures: { useful: false, why: 'She has no fever and the headache came on in seconds, which points to bleeding rather than infection.' },
     dimer: { useful: false, why: 'A D-dimer has no role in finding a brain bleed and could send you looking for a clot that is not there.' }
   },
@@ -433,7 +436,7 @@ window.CASE_EXTRAS['d-neuro-sah-01'] = {
     afterDecision: 3,
     who: 'The patient',
     title: 'Is this my fault?',
-    situation: 'Her blood pressure is now controlled and she can talk more easily. She says, "My mum had a bleed like this too. Did I cause this by smoking? Will my children get it?"',
+    situation: 'While the team prepares to treat the aneurysm, she is alert and talking clearly. She says, "My mum had a bleed like this too. Did I cause this by smoking? Will my children get it?"',
     question: 'How do you respond?',
     options: [
       { text: 'Explain it isn’t her fault, though smoking raises the risk and stopping helps; family checks are for the specialists.', correct: true,
@@ -456,7 +459,7 @@ window.CASE_EXTRAS['d-cardio-tamponade-01'] = {
   esiWhy: 'Low blood pressure, a fast pulse, swollen neck veins and a near-faint mean his heart is being squeezed, and he needs life-saving treatment now.',
   tests: {
     ecg: { useful: true, report: 'Fast regular rhythm. Small (low-voltage) complexes, and the size of each beat alternates slightly from beat to beat.', image: 'ecg-low-voltage',
-      stages: [ { from: 3, report: 'Regular rhythm at about 92. The complexes are a little bigger than before drainage.', image: 'ecg-sinus-tach' } ] },
+      stages: [ { from: 3, report: 'Regular rhythm at about 92. The complexes are a little bigger than before drainage.', image: 'ecg-normal' } ] },
     us_bedside: { useful: true, report: 'Large collection of fluid all around the heart. The right-sided heart chambers are being squashed and collapse inward with each beat.',
       stages: [
         { from: 3, report: 'After drainage: only a small amount of fluid remains. The heart chambers fill normally.' },
@@ -477,12 +480,12 @@ window.CASE_EXTRAS['d-cardio-tamponade-01'] = {
       { name: 'White blood cells', value: '10.4 ×10⁹/L', flag: '', ref: '4.5–11.0' },
       { name: 'Platelets', value: '298 ×10⁹/L', flag: '', ref: '150–400' }
     ] },
-    ct_chest: { useful: false, why: 'Lying flat in a scanner is dangerous for him, and bedside ultrasound already shows the problem.' },
+    ct_chest: { useful: false, report: 'Large fluid collection around the heart. No blood clot in the lungs.', why: 'Lying flat in a scanner is dangerous for him, and bedside ultrasound already shows the problem.' },
     dimer: { useful: false, why: 'The ultrasound has found the cause of his breathlessness; a D-dimer would only add confusion and delay.' },
     cultures: { useful: false, why: 'He has no fever and looks like a post-viral effusion; the fluid sample itself is the more useful test for infection.' }
   },
   talk: {
-    afterDecision: 1,
+    afterDecision: 2,
     who: 'The patient',
     title: 'A needle near my heart?',
     situation: 'You explain that cardiology is coming to drain the fluid. He grips the bed rail: "A needle near my heart? That sounds terrifying. Can’t we try tablets first and see if it goes away?"',

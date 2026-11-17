@@ -352,7 +352,7 @@ window.CASE_EXTRAS['f-febrile-seizure'] = {
     question: 'How do you respond?',
     options: [
       { text: 'That must have been so frightening. The seizure has stopped and she is breathing well. Seizures with fever are common at her age.', correct: true,
-        feedback: 'It acknowledges the fear, gives calming facts about right now, and promises a fuller explanation once she is examined.' },
+        feedback: 'It acknowledges the fear, gives calming facts about right now, and gently eases the epilepsy worry without promising anything before she is examined.' },
       { text: 'It is very likely epilepsy, so she will probably need tests and daily medicine for many years. We will refer her to a specialist.', correct: false,
         feedback: 'This jumps to a wrong conclusion; most seizures with fever in toddlers are not epilepsy.' },
       { text: 'Please try to calm down, because you being upset will only make her more upset too. She is fine.', correct: false,
@@ -433,7 +433,12 @@ window.CASE_EXTRAS['f-carbon-monoxide'] = {
       { name: 'pH', value: '7.33', flag: 'L', ref: '7.35–7.45' },
       { name: 'CO₂', value: '34 mmHg', flag: 'L', ref: '35–45' },
       { name: 'Oxygen dissolved in blood', value: '96 mmHg', flag: '', ref: '80–100' },
-      { name: 'Pulse oximeter reading', value: '99%', flag: '', ref: '95–100 (falsely normal with CO)' } ] },
+      { name: 'Pulse oximeter reading', value: '99%', flag: '', ref: '95–100 (falsely normal with CO)' } ],
+      stages: [ { from: 1, results: [
+        { name: 'pH', value: '7.33', flag: 'L', ref: '7.35–7.45' },
+        { name: 'CO₂', value: '34 mmHg', flag: 'L', ref: '35–45' },
+        { name: 'Oxygen dissolved in blood (on high-flow mask)', value: '320 mmHg', flag: 'H', ref: '80–100 on room air' },
+        { name: 'Pulse oximeter reading', value: '100%', flag: '', ref: '95–100 (falsely normal with CO)' } ] } ] },
     lactate: { useful: true, results: [ { name: 'Lactate', value: '3.1 mmol/L', flag: 'H', ref: '0.5–2.0' } ] },
     troponin: { useful: true, results: [ { name: 'Troponin (heart muscle marker)', value: 'Mildly raised', flag: 'H', ref: 'Below lab cutoff' } ] },
     ecg: { useful: true, report: 'Fast regular rhythm (sinus tachycardia) with mild changes suggesting strain on the heart muscle.', image: 'ecg-sinus-tach' },

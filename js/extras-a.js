@@ -112,7 +112,7 @@ window.CASE_EXTRAS['core-asthma'] = {
       stages: [
         { from: 2, results: [
           { name: 'pH', value: '7.34', flag: 'L', ref: '7.35–7.45' },
-          { name: 'CO₂', value: '45 mmHg', flag: 'H', ref: '35–45' } ] },
+          { name: 'CO₂', value: '45 mmHg', flag: 'H', ref: '35–45 (expected low in severe asthma)' } ] },
         { from: 5, results: [
           { name: 'pH', value: '7.31', flag: 'L', ref: '7.35–7.45' },
           { name: 'CO₂', value: '50 mmHg', flag: 'H', ref: '35–45' } ] },
@@ -187,23 +187,30 @@ window.CASE_EXTRAS['core-appendicitis'] = {
         { name: 'Nitrites', value: 'Negative', flag: '', ref: 'Negative' }
       ]
     },
-    us_formal: { useful: true, report: 'Appendix not clearly seen. Small amount of free fluid in the lower right abdomen. Inconclusive.' },
+    us_formal: { useful: true, report: 'Appendix not clearly seen. Small amount of free fluid in the lower right abdomen. Inconclusive.',
+      stages: [ { from: 3, report: 'The appendix has been removed. No fluid collection (abscess) seen.' } ] },
     mri: {
       useful: true,
       report: 'Inflamed, swollen appendix (11 mm) with a small hard stone (appendicolith) at its base. No abscess. No clear perforation.',
-      stages: [ { from: 2, report: 'Swollen appendix with a small stone at its base, now with more free fluid around it, suggesting a small perforation.' } ]
+      stages: [
+        { from: 2, report: 'Swollen appendix with a small stone at its base, now with more free fluid around it, suggesting a small perforation.' },
+        { from: 3, report: 'The appendix has been removed. Expected changes after surgery. No fluid collection (abscess).' }
+      ]
     },
     ct_abd: {
       useful: true,
       report: 'Swollen, inflamed appendix (11 mm) with a small stone at its base and inflamed fat around it. No abscess.',
-      stages: [ { from: 2, report: 'Swollen appendix with a small stone, a little free air and fluid nearby — consistent with a small perforation.' } ]
+      stages: [
+        { from: 2, report: 'Swollen appendix with a small stone, a little free air and fluid nearby — consistent with a small perforation.' },
+        { from: 3, report: 'The appendix has been removed. Expected changes after surgery. No fluid collection (abscess).' }
+      ]
     },
     lipase: { useful: false, why: 'Pancreas pain is usually high in the upper abdomen; his pain moved to the lower right, which points to the appendix.' },
     xr_abd: { useful: false, why: 'A plain abdominal X-ray rarely shows appendicitis, so it adds radiation without answering the question.' },
     cxr: { useful: false, why: 'He has no cough or breathing symptoms, so a chest X-ray will not help explain lower-right belly pain.' }
   },
   talk: {
-    afterDecision: 1,
+    afterDecision: 2,
     who: 'The patient',
     title: 'Nervous about surgery',
     situation: 'After the surgeons leave, he quietly asks you, "Do they really have to cut me open? Will I be awake? I\'ve never had an operation before."',
@@ -236,7 +243,7 @@ window.CASE_EXTRAS['ortho-wrist-01'] = {
     ecg: { useful: false, why: 'Her slightly fast pulse is from pain and worry; she has no chest symptoms, so a heart tracing adds nothing.' }
   },
   talk: {
-    afterDecision: 2,
+    afterDecision: 3,
     who: 'The patient',
     title: '"Is it broken?"',
     situation: 'Now that the tingling has settled, she looks at the X-ray on the screen and asks, worried, "So is it broken? Will I need an operation? I have a volleyball tournament in two weeks."',
@@ -266,7 +273,7 @@ window.CASE_EXTRAS['a-afib-thyroid-01'] = {
       useful: true,
       report: 'Atrial fibrillation — irregularly irregular rhythm with no clear P waves — at about 148 per minute. No signs of a heart attack.',
       image: 'ecg-afib',
-      stages: [ { from: 3, report: 'Still atrial fibrillation, but the rate is now about 100 per minute. No signs of a heart attack.', image: 'ecg-afib' } ]
+      stages: [ { from: 4, report: 'Still atrial fibrillation, but the rate is now about 100 per minute. No signs of a heart attack.', image: 'ecg-afib' } ]
     },
     tsh: {
       useful: true,
@@ -308,8 +315,8 @@ window.CASE_EXTRAS['a-afib-thyroid-01'] = {
         feedback: 'False reassurance is not honest — she does have a real, if small, risk. It also makes her less likely to take a blood thinner seriously.' },
       { text: 'Yes, unfortunately your stroke risk is very high now, much like your father\'s was, so you need to be careful.', correct: false,
         feedback: 'This exaggerates the risk and frightens her. Good communication gives the honest size of a risk, not the scariest version.' },
-      { text: 'This rhythm raises the risk a little. We\'ll work out your risk and talk about blood thinners to lower it.', correct: true,
-        feedback: 'It is honest about the risk, gives it a sensible size, and shows her there is a plan she will be part of.' },
+      { text: 'This rhythm does raise stroke risk, but we can lower it. We\'ll work out your risk and discuss blood thinners.', correct: true,
+        feedback: 'It is honest that the risk is real without exaggerating it, and shows her there is a plan to lower it that she will be part of.' },
       { text: 'I cannot really say anything about stroke today — cardiology will explain it all properly before you go home.', correct: false,
         feedback: 'She asked a direct question while frightened. You can give a simple, honest answer now and let cardiology add the details.' }
     ]
@@ -416,7 +423,7 @@ window.CASE_EXTRAS['a-pneumonia-01'] = {
     options: [
       { text: 'Sure, once the fever is gone you can stop them, because by then the tablets will have done their job anyway.', correct: false,
         feedback: 'Feeling better usually comes before the infection is fully cleared. Stopping early risks the pneumonia coming back.' },
-      { text: 'Please finish the course — you\'ll feel better before it\'s fully cleared. Ask your doctor about work when ready.', correct: true,
+      { text: 'Please finish the course — you\'ll feel better before it\'s fully cleared. I can give you a note for work.', correct: true,
         feedback: 'Clear, honest advice with the reason behind it, and it respects his worry about work instead of ignoring it.' },
       { text: 'You must take every single tablet or the bacteria will become resistant and next time no antibiotic will work at all.', correct: false,
         feedback: 'This exaggerates and frightens rather than explains. Accurate, calm reasons help people follow advice.' },
@@ -439,7 +446,7 @@ window.CASE_EXTRAS['a-stroke-01'] = {
         { from: 4, report: 'Repeat CT brain: a small area of bleeding within the stroke area. No large bleed.' }
       ]
     },
-    ecg: { useful: true, report: 'Sinus rhythm, rate 84. No atrial fibrillation. Signs of a thickened heart muscle from long-term high blood pressure.', image: 'ecg-normal' },
+    ecg: { useful: true, report: 'Sinus rhythm, rate 84. No atrial fibrillation and no signs of a heart attack.', image: 'ecg-normal' },
     cbc: {
       useful: true,
       results: [
@@ -466,7 +473,7 @@ window.CASE_EXTRAS['a-stroke-01'] = {
     dimer: { useful: false, why: 'A D-dimer does not diagnose stroke and would not change the urgent treatment decision.' }
   },
   talk: {
-    afterDecision: 1,
+    afterDecision: 2,
     who: 'His wife',
     title: 'A risky medicine',
     situation: 'The stroke team is about to offer a clot-dissolving drug. His wife says, "They said it can cause bleeding in the brain. Is it safe? I don\'t know what to decide."',
@@ -476,7 +483,7 @@ window.CASE_EXTRAS['a-stroke-01'] = {
         feedback: 'Every treatment has risks, and this one has a real bleeding risk. Hiding it is not honest and takes away a fair choice.' },
       { text: 'It is very risky, so if I were you I would avoid it and just wait to see whether he gets better on his own.', correct: false,
         feedback: 'For a stroke treated early, the expected benefit is greater than the risk for most patients. Waiting means losing brain cells.' },
-      { text: 'There\'s a small chance of bleeding, but for most people it improves recovery. What worries you most?', correct: true,
+      { text: 'There\'s a small chance of bleeding, but it improves the chance of a good recovery. What worries you most?', correct: true,
         feedback: 'It is honest about both benefit and risk, uses plain words, and invites her concerns so the family can make an informed choice.' },
       { text: 'You need to decide in the next minute, because we cannot wait around while every minute he is losing brain.', correct: false,
         feedback: 'Time does matter, but pressure without information is frightening and unfair. A short, clear explanation is quick and kind.' }
@@ -517,7 +524,7 @@ window.CASE_EXTRAS['a-seizure-01'] = {
     question: 'How do you respond?',
     options: [
       { text: 'Okay, I promise I will keep that just between us, and I won\'t write any of it down anywhere in your notes either.', correct: false,
-        feedback: 'Promising total secrecy about something important for her safety is a promise you cannot keep, and the information belongs in her notes.' },
+        feedback: 'Important information like a seizure trigger must go in her notes, and a promise of total secrecy is not one you should make. Encourage sharing instead.' },
       { text: 'Thanks for telling me. Lack of sleep can trigger seizures, so it matters — can we tell them together?', correct: true,
         feedback: 'It respects her trust, explains why the information matters, and gives her some control over how her parents hear it.' },
       { text: 'Your parents have a right to know everything, so I am going to go and tell them about it right now myself.', correct: false,
@@ -580,7 +587,7 @@ window.CASE_EXTRAS['b-gi-bleed-01'] = {
     lipase: { useful: false, why: 'He has no upper belly pain typical of pancreatitis; his problem is bleeding, not pancreas inflammation.' }
   },
   talk: {
-    afterDecision: 3,
+    afterDecision: 4,
     who: 'His wife',
     title: 'Why does he need blood?',
     situation: 'His wife sees the bag of blood being hung up and goes pale: "Why does he need a transfusion? Is he going to die? Nobody is telling me anything."',
@@ -703,8 +710,8 @@ window.CASE_EXTRAS['b-meningitis-01'] = {
     situation: 'His mother calls from three hours away, crying: "His roommate says he\'s in the emergency room with meningitis. Is he going to be okay? Should I come now?"',
     question: 'How do you respond?',
     options: [
-      { text: 'He\'s very unwell with a serious infection, but treatment started quickly and the ICU team is with him. Please come.', correct: true,
-        feedback: 'Honest about how serious it is, shares that care is under way, and gives her the clear answer she asked for about coming.' },
+      { text: 'He\'s asked me to update you. He\'s very unwell with a serious infection, but treatment started fast. Please come.', correct: true,
+        feedback: 'It respects his privacy (he agreed to the update), is honest about how serious it is, shares that care is under way, and answers her question about coming.' },
       { text: 'I am sorry, but I really cannot give out any medical information over the phone, so please call back again later.', correct: false,
         feedback: 'Privacy matters, but with his permission or once identity is checked, a parent can be updated. Hanging up on a frightened mother is unkind.' },
       { text: 'Oh, it\'s probably just a bad virus going round the dorms, so there is really no need to make the long drive tonight.', correct: false,

@@ -634,7 +634,10 @@ function deliverOrders() {
 }
 function deliverResult(p, o) {
   const T = CLIN.TESTS[o.test], e = testEntry(p, o.test), v = vitals(p) || {};
-  const r = (e && (e.results || e.report)) ? e : CLIN.normalResult(o.test, p, v);
+  // A test marked 'not needed' without its own result must not show a made-up normal value that could contradict the case.
+  const r = (e && (e.results || e.report)) ? e
+    : (e && e.useful === false) ? (CLIN.isLab(o.test) ? { results: [{ name: T.name, value: 'Not helpful for this patient\'s problem', flag: '', ref: '' }] } : { report: 'No findings that help with this patient\'s problem.' })
+    : CLIN.normalResult(o.test, p, v);
   const note = (e && e.useful === false && e.why) ? e.why : (!e ? "This test probably wasn't needed for this patient's problem." : '');
   o.note = note;
   if (r.results) r.results.forEach(l => { p.labs.push(Object.assign({ t: S.clock }, l)); rec(p, 'lab', l.name + ': ' + l.value + (l.flag ? ' (' + l.flag + ')' : '')); });
