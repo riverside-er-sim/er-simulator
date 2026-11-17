@@ -174,9 +174,9 @@ function monitorWaves(o) {
 const EQUIP = [
   ['vent', /breathing tube|intubat|ventilat|protect (his|her|the) airway|airway team/],
   ['neb', /nebuli|bronchodilator|inhaled/],
-  ['oxygen', /oxygen|non-rebreather|cpap|bipap|high-flow/],
+  ['oxygen', /(give|giving|start|starting|with|on|high-flow|supplemental|extra) oxygen|oxygen (mask|therapy|by mask)|non-rebreather|cpap|bipap/],
   ['blood', /transfus|red blood cells|blood product/],
-  ['iv', /\biv\b|intravenous|fluids|drip|antibiotic|insulin|infusion|transfus|blood thinner|clot-dissolving|clot-busting|clot removal|medicine through/],
+  ['iv', /\biv\b|intravenous|fluids|drip|start antibiotics|antibiotics (that|now|without)|insulin|infusion|transfus|clot-dissolving|clot-busting|heart-attack medicines|support heart pumping|blood pressure support|reverse the blood thinner|reversal|medicine through/],
   ['collar', /collar|c-spine|neck brace|spine (precautions|protection)/],
   ['splintArm', /(splint|sling|cast).*\b(wrist|arm|elbow|hand|forearm)\b|\b(wrist|arm|elbow|hand|forearm)\b.*(splint|sling|cast)/],
   ['splintLeg', /(splint|traction|cast).*\b(leg|hip|ankle|knee|shin|tibia|femur)\b|\b(leg|hip|ankle|knee|shin|tibia|femur)\b.*(splint|traction|cast)/],
@@ -323,7 +323,7 @@ function drawUS(id) {
     case 'us-hydro': s = '<ellipse cx="150" cy="160" rx="96" ry="58" fill="#6a6a6a" stroke="#c8c8c8" stroke-width="5"/><path d="M110 160 Q150 150 190 160 M150 158 L130 126 M150 158 L176 128 M150 162 L132 194 M150 162 L172 192" stroke="#050505" stroke-width="16" stroke-linecap="round" fill="none"/>'; break;
     case 'us-target': s = '<circle cx="150" cy="160" r="70" fill="#7a7a7a"/><circle cx="150" cy="160" r="56" fill="#1c1c1c"/><circle cx="150" cy="160" r="42" fill="#9a9a9a"/><circle cx="150" cy="160" r="28" fill="#1c1c1c"/><circle cx="150" cy="160" r="14" fill="#b0b0b0"/>'; break;
     case 'us-dvt': s = '<circle cx="120" cy="150" r="24" fill="#050505" stroke="#bdbdbd" stroke-width="4"/><circle cx="185" cy="160" r="36" fill="#7c7c7c" stroke="#bdbdbd" stroke-width="3"/><text x="150" y="250" text-anchor="middle" font-size="12" fill="#cfcfcf" font-family="sans-serif">Vein does not squash when pressed</text>'; break;
-    case 'us-aorta': s = '<path d="M30 120 Q150 90 270 120 L270 210 Q150 240 30 210 Z" fill="#050505" stroke="#bdbdbd" stroke-width="5"/><path d="M40 160 Q150 140 260 168" stroke="#c8c8c8" stroke-width="3" fill="none"/>'; break;
+    case 'us-aorta': s = '<path d="M30 120 Q150 90 270 120 L270 210 Q150 240 30 210 Z" fill="#050505" stroke="#bdbdbd" stroke-width="5"/>'; break;
     case 'us-no-sliding': s = '<rect x="0" y="16" width="300" height="80" fill="#6a6a6a"/><path d="M0 96 L300 96" stroke="#f5f5f5" stroke-width="5"/>' + Array.from({ length: 16 }, (_, i) => '<path d="M0 ' + (110 + i * 10) + ' L300 ' + (110 + i * 10) + '" stroke="#8a8a8a" stroke-width="3"/>').join('') + '<text x="150" y="292" text-anchor="middle" font-size="12" fill="#cfcfcf" font-family="sans-serif">Motion strip: straight "barcode" lines</text>'; break;
     case 'us-pericardial': s = '<ellipse cx="150" cy="170" rx="94" ry="76" fill="#050505"/><ellipse cx="150" cy="170" rx="80" ry="64" fill="#666"/><ellipse cx="124" cy="160" rx="24" ry="34" fill="#0a0a0a"/><ellipse cx="178" cy="166" rx="18" ry="28" fill="#0a0a0a"/>'; break;
   }
@@ -389,7 +389,8 @@ function floorMap(patients, o) {
     }
     s += '</g>';
   });
-  hall.slice(0, 6).forEach((p, i) => {
+  if (hall.length > 5) s += '<text x="862" y="528" text-anchor="end" font-size="11" font-weight="800" fill="#5b6b82" font-family="Inter,sans-serif">+' + (hall.length - 4) + ' more</text>';
+  hall.slice(0, hall.length > 5 ? 4 : 5).forEach((p, i) => {
     const cx = 612 + i * 50, cy = 524, col = ST_COL[p.status] || '#5b6b82';
     s += '<g class="mroom occ" data-room="' + p.id + '" tabindex="0" role="button"><title>Patient ' + p.num + ' (' + p.bed + ') — ' + p.status + '</title><circle cx="' + cx + '" cy="' + cy + '" r="19" fill="' + col + '"/>' + portrait(p, 34, { at: [cx - 17, cy - 17] }) +
       '<text x="' + cx + '" y="' + (cy + 31) + '" text-anchor="middle" font-size="9" font-weight="800" fill="' + col + '" font-family="Inter,sans-serif">P' + p.num + '</text></g>';

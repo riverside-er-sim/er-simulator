@@ -113,7 +113,6 @@ const IMAGES = {
   'ct-abd-appendicitis': { kind: 'ctabd', label: 'Swollen, inflamed appendix (appendicitis)' },
   'us-fast': { kind: 'us', label: 'Free fluid (blood) next to the spleen' },
   'us-tamponade': { kind: 'us', label: 'Large fluid collection squeezing the heart (tamponade)' },
-  'us-pericardial': { kind: 'us', label: 'Small amount of fluid around the heart' },
   'us-gallstones': { kind: 'us', label: 'Gallstones in the gallbladder' },
   'us-hydro': { kind: 'us', label: 'Swollen kidney with urine backed up (hydronephrosis)' },
   'us-target': { kind: 'us', label: 'Target-shaped bowel (intussusception)' },

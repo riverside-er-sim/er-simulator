@@ -595,7 +595,7 @@ button.term:hover,button.term:focus-visible{background:var(--blue-soft)}
 .ach.got .ach-medal .medal{filter:drop-shadow(0 2px 3px rgba(120,90,0,.3))}
 .promo-ins{display:flex;align-items:center;justify-content:center;gap:16px;margin:4px 0 14px}
 .promo-ins .arrow{font-size:26px;color:var(--ink-3)}
-.promo-ins .new{animation:popin .8s cubic-bezier(.2,1.6,.4,1) both .2s;filter:drop-shadow(0 4px 10px rgba(166,124,0,.45))}
+.promo-ins .new{filter:drop-shadow(0 4px 10px rgba(166,124,0,.45))}.promo-ins .new.anim{animation:popin .8s cubic-bezier(.2,1.6,.4,1) both .2s}
 @keyframes popin{from{transform:scale(.2) rotate(-20deg);opacity:0}to{transform:none;opacity:1}}
 .confetti{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:2000}
 .confetti i{position:absolute;top:-20px;border-radius:2px;animation:fall 3s ease-in forwards}

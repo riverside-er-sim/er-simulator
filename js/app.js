@@ -600,28 +600,41 @@ function bodySvg(p) {
 }
 /* Where on the body diagram an abnormal finding should glow. Patient's right is on the viewer's left. */
 function findingSpots(region, text) {
-  const t = String(text || '').toLowerCase(), has = re => re.test(t);
-  const R = /\bright\b/, L = /\bleft\b/;
-  const side = (r, l, both) => has(R) && !has(L) ? r : has(L) && !has(R) ? l : both; // each argument is a list of spots
+  // Ignore sentences that only describe normal parts ("Left side clear", "equal on both sides") and comparisons ("than the right").
+  let t = String(text || '').toLowerCase().replace(/\b(than|as) the (right|left)( side| one)?\b/g, '');
+  const parts = t.split(/[.;]\s*/).filter(x => x.trim());
+  const abn = parts.filter(x => !/\b(normal|clear|equal|same as|no swelling|not tender)\b/.test(x));
+  t = (abn.length ? abn : parts).join('. ');
+  const has = re => re.test(t);
+  const iR = t.search(/\bright\b/), iL = t.search(/\bleft\b/), iB = t.search(/\b(both|either) (sides|lungs|sides of)\b|\bboth\b/);
+  const first = [['R', iR], ['L', iL], ['B', iB]].filter(x => x[1] >= 0).sort((a, b) => a[1] - b[1])[0];
+  const side = (r, l, both) => !first || first[0] === 'B' ? both : first[0] === 'R' ? r : l; // each argument is a list of spots
   switch (region) {
     case 'head': return [[120, 44, 16]];
     case 'neck': return [[120, 84, 11]];
     case 'heart': return [[127, 142, 13]];
     case 'lungs': return side([[100, 138, 15]], [[140, 138, 15]], [[100, 138, 15], [140, 138, 15]]);
     case 'abdomen':
+      if (has(/flank|kidney|lower back|drainage tube/)) return side([[96, 206, 12]], [[144, 206, 12]], [[96, 206, 12], [144, 206, 12]]);
       if (has(/right lower|lower right|mcburney/)) return [[104, 222, 13]];
       if (has(/left lower|lower left/)) return [[136, 222, 13]];
       if (has(/right upper|upper right|under the right ribs|gallbladder|liver/)) return [[102, 182, 13]];
       if (has(/left upper|upper left|spleen/)) return [[138, 184, 13]];
       if (has(/upper middle|epigastr|upper belly|top of the belly|stomach/)) return [[120, 176, 13]];
-      if (has(/belly button|navel|around the middle/)) return [[120, 212, 13]];
-      if (has(/flank|kidney|side/)) return side([[96, 206, 12]], [[144, 206, 12]], [[96, 206, 12], [144, 206, 12]]);
+      if (has(/belly button|navel/)) return [[120, 212, 13]];
+      if (has(/\bon the (right|left) side\b/)) return side([[100, 200, 15]], [[140, 200, 15]], [[120, 200, 22]]);
       return [[120, 200, 22]];
-    case 'pelvis': return side([[98, 262, 13]], [[142, 262, 13]], [[120, 252, 16]]);
-    case 'armR': return [has(/wrist|hand|finger/) ? [48, 252, 12] : has(/elbow/) ? [70, 190, 12] : [64, 160, 14]];
-    case 'armL': return [has(/wrist|hand|finger/) ? [192, 252, 12] : has(/elbow/) ? [170, 190, 12] : [176, 160, 14]];
-    case 'legR': return [has(/ankle|foot/) ? [104, 470, 12] : has(/knee/) ? [98, 370, 12] : has(/calf|shin/) ? [101, 420, 14] : has(/hip|thigh/) ? [98, 300, 14] : [100, 380, 18]];
-    case 'legL': return [has(/ankle|foot/) ? [136, 470, 12] : has(/knee/) ? [142, 370, 12] : has(/calf|shin/) ? [139, 420, 14] : has(/hip|thigh/) ? [142, 300, 14] : [140, 380, 18]];
+    case 'pelvis': return has(/\bhip|groin/) ? side([[98, 262, 13]], [[142, 262, 13]], [[120, 252, 16]]) : [[120, 252, 16]];
+    case 'armR': case 'armL': {
+      const L = region === 'armL', m = x => L ? 240 - x : x;
+      const spot = has(/all the way around|whole arm/) ? [64, 170, 18] : has(/shoulder/) ? [76, 112, 12] : has(/elbow/) ? [70, 190, 12] : has(/wrist|hand|finger|pulse|palm/) ? [48, 252, 12] : [64, 160, 14];
+      return [[m(spot[0]), spot[1], spot[2]]];
+    }
+    case 'legR': case 'legL': {
+      const L = region === 'legL', m = x => L ? 240 - x : x;
+      const spot = has(/\bhip|thigh|groin|leg is shorter/) ? [98, 300, 14] : has(/knee/) ? [98, 370, 12] : has(/calf|shin/) ? [101, 420, 14] : has(/ankle|foot|toe/) ? [104, 470, 12] : [100, 380, 18];
+      return [[m(spot[0]), spot[1], spot[2]]];
+    }
   }
   return [];
 }
@@ -902,8 +915,9 @@ function checkPromotion() {
 function promoModal(m) {
   const items = []; for (let l = m.from + 1; l <= m.to; l++) (window.CAREER_UNLOCKS[l] || []).forEach(x => items.push(x));
   const unlockedN = LIB.filter(c => unlockLevel(c) <= m.to).length;
-  return (window.ART ? ART.confetti(70) : '') + '<div class="modal-h"><h2>🎉 Promoted to ' + esc(rankName(m.to)) + '!</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b promo">' +
-    (window.ART ? '<div class="promo-ins">' + ART.insignia(m.from, 64) + '<span class="arrow">→</span><span class="new">' + ART.insignia(m.to, 110) + '</span></div>' : '') +
+  const party = window.ART && !m.celebrated; m.celebrated = true; // confetti and the badge animation play once, not on every redraw
+  return (party ? ART.confetti(70) : '') + '<div class="modal-h"><h2>🎉 Promoted to ' + esc(rankName(m.to)) + '!</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b promo">' +
+    (window.ART ? '<div class="promo-ins">' + ART.insignia(m.from, 64) + '<span class="arrow">→</span><span class="new' + (party ? ' anim' : '') + '">' + ART.insignia(m.to, 110) + '</span></div>' : '') +
     '<p>Congratulations, ' + esc(S.profile.name ? 'Dr. ' + S.profile.name : 'Doctor') + '! Your hard work in the ER has earned you a promotion.</p>' +
     (items.length ? '<div class="panel-title">Newly Unlocked</div><ul class="unlock-list">' + items.map(x => '<li>🔓 ' + esc(x) + '</li>').join('') + '</ul>' : '') +
     (careerOn() ? '<p class="small muted">' + unlockedN + ' of ' + LIB.length + ' cases are now open to you.</p>' : '') + '</div>' +
@@ -1804,7 +1818,7 @@ document.addEventListener('input', e => {
     renderTop(); return;
   } if (e.target.matches && e.target.matches('[data-volume]')) { S.settings.volume = +e.target.value; syncSound(); } });
 window.addEventListener('hashchange', () => route(location.hash));
-window.ER = { get state() { return S; }, advanceTime: m => { advanceTime(m); save(); render(); }, CASES: CASES };
+window.ER = { get state() { return S; }, advanceTime: m => { advanceTime(m); save(); render(); }, CASES: CASES, findingSpots: findingSpots };
 route();
 initCloud();
 initAccounts();
