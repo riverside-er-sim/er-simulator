@@ -468,6 +468,30 @@ button.term:hover,button.term:focus-visible{background:var(--blue-soft)}
 .cpr-breaths{text-align:center;font-weight:700;color:var(--blue);padding:10px}
 .cpr-result h3{font-size:20px;margin-bottom:6px}
 
+/* Career mode, Case of the Day, leaderboard */
+.career-banner{display:flex;gap:8px;align-items:center;background:var(--blue-soft);color:var(--navy);border-radius:10px;padding:10px 14px;margin-bottom:14px;font-size:14px}
+.btn.locked{opacity:.7;cursor:not-allowed;background:var(--bg)}
+.promo ul.unlock-list{list-style:none;padding:0;margin:0 0 10px}
+.promo .unlock-list li{padding:8px 10px;background:var(--stab-bg);border-radius:8px;margin-bottom:6px;font-weight:600}
+.ranks .unl{display:block;font-size:11.5px;color:var(--ink-3);font-weight:500}
+.ranks li.cur .unl{color:var(--blue)}
+.daily{background:linear-gradient(135deg,#0b2545,#1e4174);color:#fff;border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;box-shadow:var(--shadow)}
+.daily-h{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center}
+.daily-tag{display:inline-flex;gap:6px;align-items:center;font-size:12px;font-weight:800;letter-spacing:.8px;color:#a9c8ff}
+.daily-streak{font-weight:800;font-size:13px}
+.daily-case{display:flex;gap:10px;align-items:center;margin:10px 0}
+.daily-case .ic{flex:0 0 38px;height:38px;border-radius:9px;background:rgba(255,255,255,.12);display:grid;place-items:center}
+.daily-case b{font-size:17px}
+.daily-case .small{color:#cfdcf0}
+.daily-f{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.daily .btn-primary{background:#fff;color:var(--navy);border-color:#fff}
+.daily .btn-sm{background:transparent;color:#fff;border-color:rgba(255,255,255,.4)}
+.daily-score{font-size:14px}
+.lb .lb-pos{font-size:18px;width:40px;text-align:center}
+.lb-doc{display:inline-flex;gap:8px;align-items:center}
+.lb .tb-av{width:26px;height:26px;border-radius:7px;background:var(--pc);display:grid;place-items:center;color:#fff}
+.lb tr.me td{background:var(--blue-soft)}
+
 /* ── Responsive ── */
 @media (max-width:1050px){
   .room{grid-template-columns:1fr;grid-template-areas:"mon" "exam" "dec" "upd" "res" "trend" "info" "act"}

@@ -103,7 +103,7 @@ function cloudSave() {
       for (let i = (S.history || []).length - 1; i >= 1 && json.length > L; i--) { S.history[i].patients.forEach(ap => { if (ap.record && ap.record.length) { ap.record = []; ap.trimmed = true; } }); json = JSON.stringify(S); }
       if (json.length > L) { S.alerts = S.alerts.slice(0, 15); S.patients.forEach(p => { p.vh = p.vh.slice(-40); }); json = JSON.stringify(S); }
       if (json.length > L + 20000) { const keep = S.patients.filter(p => !isClosed(p)); json = JSON.stringify(Object.assign({}, S, { patients: keep })); }
-      cloud.ref.set({ json: json, savedAt: S.savedAt || Date.now() }).then(() => { if (account && account.error) { account.error = ''; renderTop(); } }).catch(e => { if (account) { account.error = 'Not saving to your account right now (' + ((e && e.code) || 'error') + '). Your game is still saved on this device.'; renderTop(); } });
+      cloud.ref.set({ json: json, savedAt: S.savedAt || Date.now() }).then(() => { if (account && account.error) { account.error = ''; renderTop(); } if (account) pushLeaderboard(); }).catch(e => { if (account) { account.error = 'Not saving to your account right now (' + ((e && e.code) || 'error') + '). Your game is still saved on this device.'; renderTop(); } });
     } catch (e) { /* ignore */ }
   }, 1500);
 }
@@ -458,7 +458,7 @@ function startArrest(p) {
 }
 function die(p, why) {
   if (why) rec(p, 'outcome', why);
-  p.arrest = null; scoreDx(p);
+  p.arrest = null; scoreDx(p); scoreDaily(p, 'deceased');
   S.career.deaths++;
   p.outcome = 'deceased'; p.outcomeTime = S.clock; p.rescueActive = false; p.feedback = p.feedback || null;
   rec(p, 'status', 'Status changed: ' + p.status + ' → Deceased');
@@ -509,7 +509,9 @@ function advanceTime(mins, reason) {
 }
 function admitRandom(byAmbulance, filter) {
   filter = filter || {};
-  let pool = LIB.filter(c => (!filter.spec || c.specialty === filter.spec) && (!filter.diff || c.difficulty === filter.diff));
+  let pool = LIB.filter(c => isUnlocked(c) && (!filter.spec || c.specialty === filter.spec) && (!filter.diff || c.difficulty === filter.diff));
+  if (!pool.length && (filter.spec || filter.diff)) { ui.libMsg = 'No unlocked cases match that filter yet — rank up to unlock more.'; return null; }
+  if (!pool.length) pool = LIB.filter(isUnlocked);
   if (!pool.length) return null;
   const active = new Set(S.patients.filter(p => !isClosed(p)).map(p => p.caseId));
   const fresh = pool.filter(c => !active.has(c.id)); if (fresh.length) pool = fresh;
@@ -768,7 +770,8 @@ function triggerShiftEvent() {
     const active = S.patients.filter(p => !isClosed(p)).length;
     const room = Math.max(0, 10 - active), n = Math.min(3, room);
     if (!n) { hospAlert('Ambulance diversion', 'A multi-vehicle crash nearby, but the ER is full — ambulances are being sent to another hospital.'); return; }
-    let pool = shuffle(LIB.filter(c => c.specialty === 'Trauma' || c.specialty === 'Orthopedics'));
+    let pool = shuffle(LIB.filter(c => (c.specialty === 'Trauma' || c.specialty === 'Orthopedics') && isUnlocked(c)));
+    if (!pool.length) pool = shuffle(LIB.filter(isUnlocked));
     for (let i = 0; i < n && pool.length; i++) admitCase(pool[i % pool.length].id, true);
     S.alerts.forEach((a, i) => { if (i < n && a.kind === 'New ambulance arrival') a.quiet = true; }); // one combined alert instead of n pop-ups
     hospAlert('MASS CASUALTY', 'Multi-vehicle crash nearby: ' + n + ' patients have just arrived at once. Triage them quickly!');
@@ -848,6 +851,128 @@ function finishCpr(pid, res) {
   save(); render(); window.scrollTo(0, 0);
 }
 
+/* ───────── Career mode: unlock cases and hospital areas by rank ───────── */
+const DIFF_UNLOCK = { Beginner: 1, Intermediate: 2, Advanced: 4, Expert: 5 };
+const AREA_UNLOCK = { Pediatrics: [2, 'Pediatric ER'], Trauma: [3, 'Trauma Bay'] };
+window.CAREER_UNLOCKS = { 1: ['Beginner cases', 'Main ER & Fast Track'], 2: ['Intermediate cases', 'Pediatric ER'], 3: ['Trauma Bay'], 4: ['Advanced cases'], 5: ['Expert cases'], 6: ['Teaching junior doctors (bragging rights)'], 7: ['Running the whole ER'] };
+function rankLevel() { return window.PROFILE ? PROFILE.rank(S).level : 7; }
+function careerOn() { return S.settings.career !== false; }
+function unlockLevel(c) { return Math.max(DIFF_UNLOCK[c.difficulty] || 1, (AREA_UNLOCK[c.specialty] || [1])[0]); }
+function isUnlocked(c) { return !careerOn() || unlockLevel(c) <= rankLevel(); }
+function rankName(level) { return window.PROFILE && PROFILE.RANKS[level - 1] ? PROFILE.RANKS[level - 1].name : 'a higher rank'; }
+function checkPromotion() {
+  if (!window.PROFILE || !S.career) return;
+  const lv = rankLevel();
+  if (S.career.lastLevel == null) { S.career.lastLevel = lv; return; }
+  if (lv > S.career.lastLevel) {
+    const from = S.career.lastLevel; S.career.lastLevel = lv;
+    if (!ui.modal) ui.modal = { type: 'promo', from: from, to: lv };
+    try { localStorage.setItem(activeKey, JSON.stringify(S)); } catch (e) { }
+  }
+}
+function promoModal(m) {
+  const items = []; for (let l = m.from + 1; l <= m.to; l++) (window.CAREER_UNLOCKS[l] || []).forEach(x => items.push(x));
+  const unlockedN = LIB.filter(c => unlockLevel(c) <= m.to).length;
+  return '<div class="modal-h"><h2>🎉 Promoted to ' + esc(rankName(m.to)) + '!</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b promo">' +
+    '<p>Congratulations, ' + esc(S.profile.name ? 'Dr. ' + S.profile.name : 'Doctor') + '! Your hard work in the ER has earned you a promotion.</p>' +
+    (items.length ? '<div class="panel-title">Newly Unlocked</div><ul class="unlock-list">' + items.map(x => '<li>🔓 ' + esc(x) + '</li>').join('') + '</ul>' : '') +
+    (careerOn() ? '<p class="small muted">' + unlockedN + ' of ' + LIB.length + ' cases are now open to you.</p>' : '') + '</div>' +
+    '<div class="modal-f"><button class="btn" data-act="close">Back to Work</button><button class="btn btn-primary" data-act="close" data-go="#/library">See New Cases</button></div>';
+}
+function careerBanner() {
+  if (!careerOn()) return '<div class="career-banner">' + icon('book', 18) + '<span><b>Free Play:</b> every case is open. Turn on Career Mode in Settings to unlock cases as you rank up.</span></div>';
+  const lv = rankLevel(), n = LIB.filter(isUnlocked).length;
+  const next = LIB.filter(c => !isUnlocked(c)).map(unlockLevel).sort((a, b) => a - b)[0];
+  return '<div class="career-banner">' + icon('steth', 18) + '<span><b>Career Mode · ' + esc(rankName(lv)) + ':</b> ' + n + ' of ' + LIB.length + ' cases unlocked.' + (next ? ' More unlock at <b>' + esc(rankName(next)) + '</b>.' : ' Everything is unlocked!') + '</span></div>';
+}
+
+/* ───────── Case of the Day ───────── */
+const DAILY_DIFF = ['Beginner', 'Beginner', 'Intermediate', 'Intermediate', 'Advanced', 'Advanced', 'Expert']; // Sunday..Saturday
+function dateStr(d) { d = d || new Date(); return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+function dailyCase(date) {
+  const d = new Date(date + 'T12:00:00'), diff = DAILY_DIFF[d.getDay()];
+  const pool = LIB.filter(c => c.difficulty === diff).sort((a, b) => a.id < b.id ? -1 : 1);
+  let h = 7; for (let i = 0; i < date.length; i++) h = (h * 31 + date.charCodeAt(i)) >>> 0;
+  return pool.length ? pool[h % pool.length] : LIB[h % LIB.length];
+}
+function dailyCard() {
+  const today = dateStr(), c = dailyCase(today), e = S.daily[today];
+  const head = '<div class="daily-h"><span class="daily-tag">' + icon('clock', 16) + 'CASE OF THE DAY · ' + new Date(today + 'T12:00:00').toLocaleDateString([], { weekday: 'long', month: 'short', day: 'numeric' }) + '</span>' +
+    ((S.career.dailyStreak || 0) > 1 ? '<span class="daily-streak">🔥 ' + S.career.dailyStreak + '-day streak</span>' : '') + '</div>';
+  const what = '<div class="daily-case"><span class="ic">' + icon(c.specialty, 20) + '</span><div><b>' + esc(c.title) + '</b><div class="small">' + esc(c.specialty) + ' · <span class="diff diff-' + c.difficulty + '">' + c.difficulty + '</span> · Everyone gets the same case today. One attempt.</div></div></div>';
+  let act;
+  if (e && e.done) act = '<div class="daily-score"><b>' + e.score + ' points</b> — ' + (e.outcome === 'discharged' ? 'patient discharged safely' : 'patient died') + '. Come back tomorrow for a new case!</div>';
+  else if (e && S.patients.some(p => p.id === e.pid && !isClosed(p))) act = '<button class="btn btn-primary" data-room="' + e.pid + '">Continue Today\'s Case</button>';
+  else if (e) act = '<div class="daily-score">Today\'s attempt has ended. Come back tomorrow!</div>';
+  else act = '<button class="btn btn-primary" data-act="daily-start">Play Today\'s Case</button>';
+  return '<section class="daily">' + head + what + '<div class="daily-f">' + act + (window.fbAuthReady ? '' : '') + '<button class="btn btn-sm" data-go="#/leaderboard">🏆 Leaderboard</button></div></section>';
+}
+function scoreDaily(p, outcome) {
+  if (!p.daily || !S.daily[p.daily] || S.daily[p.daily].done) return;
+  const mine = p.log.filter(l => !l.pre && !l.talk), talk = p.log.find(l => l.talk);
+  const o = p.orders || [], good = o.filter(x => x.useful).length, extra = o.length - good;
+  const reads = p.imaging.filter(im => im.readState === 'done' && im.readOk).length;
+  const parts = [
+    ['Correct decisions', mine.filter(l => l.correct).length * 10],
+    ['Triage', p.triage && p.triage.level === p.triage.correct ? 10 : 0],
+    ['Diagnosis', p.dx && p.dx.choice === caseOf(p).finalDiagnosis ? 15 : 0],
+    ['Conversation', talk && talk.correct ? 10 : 0],
+    ['Images read', reads * 5],
+    ['Useful tests', good * 2],
+    ['Unneeded tests', -extra * 2],
+    ['Outcome', outcome === 'discharged' ? 25 : 0]
+  ];
+  const score = Math.max(0, parts.reduce((a, b) => a + b[1], 0));
+  const d = S.daily[p.daily];
+  Object.assign(d, { done: true, score: score, parts: parts, outcome: outcome, caseId: p.caseId });
+  const y = new Date(p.daily + 'T12:00:00'); y.setDate(y.getDate() - 1);
+  S.career.dailyStreak = S.career.lastDaily === dateStr(y) ? (S.career.dailyStreak || 0) + 1 : 1;
+  S.career.bestDailyStreak = Math.max(S.career.bestDailyStreak || 0, S.career.dailyStreak);
+  S.career.lastDaily = p.daily; S.career.dailyDone = (S.career.dailyDone || 0) + 1;
+  rec(p, 'outcome', 'Case of the Day score: ' + score + ' points.');
+}
+
+/* ───────── Family leaderboard (public website, signed-in players only) ───────── */
+function lbEntry() {
+  const r = PROFILE.rank(S), c = S.career, tot = c.correct + c.incorrect, today = dateStr(), d = S.daily[today];
+  return { name: S.profile.name ? 'Dr. ' + S.profile.name : (account ? account.username : 'Doctor'), xp: r.xp, rank: r.name, accuracy: tot ? Math.round(100 * c.correct / tot) : null,
+    discharged: c.discharged || 0, dailyDate: d && d.done ? today : '', dailyScore: d && d.done ? d.score : null, streak: c.dailyStreak || 0, color: S.profile.color || '#1d5fbf', icon: S.profile.icon || 'steth' };
+}
+function pushLeaderboard() {
+  if (!account || !fbDb || !window.PROFILE) return;
+  const e = lbEntry(), k = JSON.stringify(e); if (k === ui.lbLast) return; ui.lbLast = k;
+  fbDb.collection('leaderboard').doc(account.uid).set(Object.assign({ updatedAt: Date.now() }, e)).catch(() => { ui.lbLast = null; });
+}
+function loadLeaderboard() {
+  if (!fbDb || ui.lbLoading) return;
+  ui.lbLoading = true;
+  fbDb.collection('leaderboard').get().then(qs => { ui.lb = { rows: qs.docs.map(d => Object.assign({ uid: d.id }, d.data())), at: Date.now() }; })
+    .catch(e => { ui.lb = { error: (e && e.code) || 'error', at: Date.now() }; })
+    .then(() => { ui.lbLoading = false; if (ui.route.name === 'leaderboard') { ui.keepScroll = true; render(); } });
+}
+function viewLeaderboard() {
+  let h = '<div class="page-head"><div><h1>Family Leaderboard</h1><p>Friendly competition between the Riverside ER doctors. Only signed-in family players can see this board.</p></div>' + (account ? '<button class="btn" data-act="lb-refresh">' + icon('refresh', 18) + 'Refresh</button>' : '') + '</div>';
+  const me = lbEntry();
+  const mine = '<div class="stats">' + stat('Your XP', me.xp, me.rank) + stat('Accuracy', me.accuracy == null ? '—' : me.accuracy + '%', 'all decisions') + stat('Discharged', me.discharged, 'patients') + stat('Daily Streak', me.streak, 'days in a row') + '</div>';
+  if (!accountsAvailable()) return h + mine + '<div class="panel empty">The family leaderboard works on the public website when you\'re signed in.</div>';
+  if (!account) return h + mine + '<div class="panel empty">Sign in to see how you compare with the other family doctors.<br><br><button class="btn btn-primary" data-act="signin">Sign In</button></div>';
+  pushLeaderboard();
+  if (!ui.lb || Date.now() - ui.lb.at > 60000) loadLeaderboard();
+  if (!ui.lb) return h + mine + '<div class="panel empty">Loading the leaderboard…</div>';
+  if (ui.lb.error) return h + mine + '<div class="panel empty">The leaderboard isn\'t available right now (' + esc(ui.lb.error) + '). Try again later.</div>';
+  const rows = ui.lb.rows.slice();
+  const row = (r, i, val) => '<tr class="' + (r.uid === account.uid ? 'me' : '') + '"><td class="lb-pos">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1) + '</td><td><span class="lb-doc"><span class="tb-av" style="--pc:' + esc(r.color || '#1d5fbf') + '">' + icon(r.icon || 'steth', 16) + '</span><b>' + esc(r.name || 'Doctor') + '</b>' + (r.uid === account.uid ? ' <span class="small muted">(you)</span>' : '') + '</span></td>' + val + '</tr>';
+  const byXp = rows.slice().sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  const today = dateStr(), daily = rows.filter(r => r.dailyDate === today && r.dailyScore != null).sort((a, b) => b.dailyScore - a.dailyScore);
+  h += mine + '<section class="panel" style="margin-bottom:16px"><div class="panel-title">🏆 Overall</div><div class="tbl-wrap"><table class="labs lb"><thead><tr><th></th><th>Doctor</th><th>Rank</th><th>XP</th><th>Accuracy</th><th>Discharged</th><th>Streak</th></tr></thead><tbody>' +
+    byXp.map((r, i) => row(r, i, '<td>' + esc(r.rank || '') + '</td><td class="mono"><b>' + (r.xp || 0) + '</b></td><td>' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</td><td>' + (r.discharged || 0) + '</td><td>' + ((r.streak || 0) ? '🔥 ' + r.streak : '—') + '</td>')).join('') + '</tbody></table></div></section>';
+  const dc = dailyCase(today);
+  h += '<section class="panel"><div class="panel-title">' + icon('clock', 18) + 'Today\'s Case: ' + esc(dc.title) + '</div>' +
+    (daily.length ? '<div class="tbl-wrap"><table class="labs lb"><thead><tr><th></th><th>Doctor</th><th>Score</th></tr></thead><tbody>' + daily.map((r, i) => row(r, i, '<td class="mono"><b>' + r.dailyScore + '</b> pts</td>')).join('') + '</tbody></table></div>'
+      : '<p class="muted">Nobody has finished today\'s case yet. Be the first!</p>') + '</section>';
+  return h;
+}
+
 /* ───────── Actions ───────── */
 function submitDecision(p, optIdx) {
   const c = caseOf(p), isRescue = p.rescueActive, d = currentDecision(p);
@@ -908,7 +1033,7 @@ function dischargeEval(p) {
 function confirmDischarge(p) {
   const ev = dischargeEval(p); if (!ev.ok) return;
   p.outcome = 'discharged'; p.outcomeTime = S.clock; p.rescueActive = false;
-  scoreDx(p);
+  scoreDx(p); scoreDaily(p, 'discharged');
   S.career.discharged++; if (p.log.filter(l => !l.pre).length && p.log.filter(l => !l.pre).every(l => l.correct)) S.career.perfect++;
   rec(p, 'status', 'Status changed: ' + p.status + ' → Discharged'); p.status = 'Discharged';
   rec(p, 'outcome', 'Disposition: ' + ev.disp.label + '. Total time under care: ' + fmtDur(S.clock - p.arrival) + '.');
@@ -921,6 +1046,7 @@ function resetPatient(p) {
   if (!p.seed) seed.keep = false;
   const np = createPatient(p.caseId, seed);
   if (!p.seed) np.seed = null;
+  if (p.daily) { np.daily = p.daily; np.needsTriage = false; }
   S.patients[idx] = np;
   S.alerts = S.alerts.filter(a => a.pid !== p.id);
   ui.selected[p.id] = null;
@@ -962,6 +1088,7 @@ function syncSound() {
 /* ───────── Rendering: shell ───────── */
 function render() {
   const y = window.scrollY;
+  checkPromotion();
   renderTop(); renderToasts();
   const r = ui.route;
   let html = '';
@@ -972,6 +1099,7 @@ function render() {
   else if (r.name === 'learn') html = window.EDU ? window.EDU.view(ui, S) : '';
   else if (r.name === 'profile') html = window.PROFILE ? window.PROFILE.view(ui, S, icon) : '';
   else if (r.name === 'history') html = viewHistory();
+  else if (r.name === 'leaderboard') html = viewLeaderboard();
   else if (r.name === 'past') html = viewPastRecord(r.shift, r.pid);
   else html = viewDash();
   document.getElementById('app').innerHTML = convTemps(html);
@@ -987,7 +1115,7 @@ function render() {
 function renderTop() {
   const unread = S.alerts.filter(a => !a.read).length;
   const r = ui.route.name;
-  const nav = [['dash', 'Waiting Room', '#/'], ['library', 'Add Patient / Cases', '#/library'], ['learn', 'Education', '#/learn'], ['report', 'Shift Report', '#/report'], ['history', 'Past Shifts', '#/history'], ['profile', 'My Profile', '#/profile']];
+  const nav = [['dash', 'Waiting Room', '#/'], ['library', 'Add Patient / Cases', '#/library'], ['learn', 'Education', '#/learn'], ['report', 'Shift Report', '#/report'], ['history', 'Past Shifts', '#/history'], ['leaderboard', 'Leaderboard', '#/leaderboard'], ['profile', 'My Profile', '#/profile']];
   let h = '<div class="tb">' +
     '<button class="brand" data-go="#/"><span class="brand-logo" style="color:var(--crit)">' + icon('Emergency Medicine', 22) + '</span><span>Riverside ER<small>Simulation · Fictional</small></span></button>' +
     '<nav class="tb-nav">' + nav.map(n => '<button class="' + ((r === n[0] || (n[0] === 'dash' && (r === 'room' || r === 'record')) || (n[0] === 'history' && r === 'past')) ? 'on' : '') + '" data-go="' + n[2] + '">' + n[1] + '</button>').join('') + '</nav>' +
@@ -1058,6 +1186,7 @@ function viewDash() {
     '<span class="small muted">Time moves when you make decisions, observe, move between rooms, or with the Live clock on.</span></div>';
   if (accountsAvailable() && !account) h += '<div class="prof-cta">' + icon('body', 22) + '<div><b>Playing as a Guest</b><div class="small">Your game saves in this browser only. Sign in to save it to your account and play on any device.</div></div><button class="btn btn-primary btn-sm" data-act="signin">Sign In</button></div>';
   if (account && account.error) h += '<div class="prof-cta" style="border-color:var(--crit);color:var(--crit)">' + icon('info', 22) + '<div><b>Account Save Problem</b><div class="small">' + esc(account.error) + '</div></div></div>';
+  h += dailyCard();
   h += eventsBanner();
   if (!S.profile.name) h += '<div class="prof-cta">' + icon('steth', 22) + '<div><b>Create Your Doctor Profile</b><div class="small">Pick your name, scrub color and dream specialty. Earn XP and rank up from Medical Student to Chief of the ER.</div></div><button class="btn btn-primary btn-sm" data-go="#/profile">Set Up Profile</button></div>';
   h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
@@ -1263,6 +1392,7 @@ function debriefExtras(p) {
   if (o.length) h += '<h4 style="margin-top:10px">Tests Ordered</h4>' + good + ' useful, ' + extra + ' not needed.';
   if (reads.length) h += '<h4 style="margin-top:10px">Images You Read</h4>' + readOk + ' of ' + reads.length + ' read correctly.';
   if (p.dx) h += '<h4 style="margin-top:10px">Your Diagnosis</h4>' + esc(p.dx.choice) + (p.dx.ok ? ' — <span class="ok-t">correct! +' + (p.dx.bonus || 0) + ' XP</span>' : ' — <span class="bad-t">not quite</span> (the answer is above)');
+  if (p.daily && S.daily[p.daily] && S.daily[p.daily].done) { const dd = S.daily[p.daily]; h += '<h4 style="margin-top:10px">Case of the Day Score: ' + dd.score + ' points</h4>' + dd.parts.filter(x => x[1]).map(x => esc(x[0]) + ' ' + (x[1] > 0 ? '+' : '') + x[1]).join(' · '); }
   const talk = p.log.find(l => l.talk); if (talk) h += '<h4 style="margin-top:10px">Bedside Manner</h4>' + (talk.correct ? 'Handled the conversation well.' : 'The conversation could have gone better.');
   return h;
 }
@@ -1333,7 +1463,8 @@ function canReturn(src) {
 function returnVisit(src, byAmbulance) {
   if (!canReturn(src)) return null;
   const seen = new Set(pastVisits(src.mrn).map(v => v.p.caseId).concat([src.caseId]));
-  const fits = LIB.filter(c => c.sex === src.sex && ageGroup(c.age) === ageGroup(src.age));
+  const fitsAll = LIB.filter(c => c.sex === src.sex && ageGroup(c.age) === ageGroup(src.age));
+  const fits = fitsAll.filter(isUnlocked).length ? fitsAll.filter(isUnlocked) : fitsAll;
   const fresh = fits.filter(c => !seen.has(c.id));
   const pool = fresh.length ? fresh : fits;
   const c = pool[Math.floor(Math.random() * pool.length)];
@@ -1390,11 +1521,12 @@ function viewLibrary() {
   const list = LIB.filter(c => (!f.spec || c.specialty === f.spec) && (!f.diff || c.difficulty === f.diff));
   let h = '<div class="page-head"><div><h1>Case Library &amp; Admissions</h1><p>' + LIB.length + ' fictional cases across ' + SPECIALTIES.length + ' specialties. Each admission generates a new patient with slight variations.</p></div>' +
     '<div class="row"><button class="btn btn-primary" data-act="gen">' + icon('plus', 18) + 'Generate Random Patient' + (f.spec || f.diff ? ' (filtered)' : '') + '</button></div></div>';
+  h += careerBanner() + (ui.libMsg ? '<div class="qres bad" style="margin-bottom:12px">' + esc(ui.libMsg) + '</div>' : ''); ui.libMsg = '';
   h += '<div class="toolbar"><select data-change="spec"><option value="">All Specialties</option>' + SPECIALTIES.map(s => '<option' + (f.spec === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select>' +
     '<select data-change="diff"><option value="">All Difficulties</option>' + DIFFS.map(s => '<option' + (f.diff === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select><span class="small muted">' + list.length + ' case(s)</span></div>';
   h += '<div class="lib-grid">' + list.map(c => '<div class="card lib-card"><div class="row" style="justify-content:space-between"><span class="spec">' + icon(c.specialty, 18) + c.specialty + '</span><span class="diff diff-' + c.difficulty + '">' + c.difficulty + '</span></div>' +
     '<h3>' + esc(c.title) + '</h3><p>' + esc(c.age) + ' y ' + (c.sex === 'F' ? 'female' : 'male') + ' · ' + esc(tc(c.chiefComplaint)) + '<br><span class="muted">' + c.decisions.length + ' decisions' + (c.canDie ? ' · life-threatening' : '') + '</span></p>' +
-    '<button class="btn btn-sm btn-primary" data-admit="' + c.id + '">' + icon('plus', 16) + 'Admit as New Patient</button></div>').join('') + '</div>';
+    (isUnlocked(c) ? '<button class="btn btn-sm btn-primary" data-admit="' + c.id + '">' + icon('plus', 16) + 'Admit as New Patient</button>' : '<button class="btn btn-sm locked" disabled>🔒 Unlocks at ' + esc(rankName(unlockLevel(c))) + '</button>') + '</div>').join('') + '</div>';
   return h;
 }
 
@@ -1430,6 +1562,8 @@ function renderModal() {
     }
   } else if (m.type === 'confirm') {
     inner = '<div class="modal-h"><h2>' + esc(m.title) + '</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' + esc(m.text) + '</div><div class="modal-f"><button class="btn" data-act="close">Cancel</button><button class="btn btn-danger" data-act="confirm-yes">' + esc(m.yes) + '</button></div>';
+  } else if (m.type === 'promo') {
+    inner = promoModal(m);
   } else if (m.type === 'dx') {
     const dp = S.patients.find(x => x.id === m.id); inner = dp ? dxModal(dp) : '';
   } else if (m.type === 'signin') {
@@ -1438,6 +1572,7 @@ function renderModal() {
     const sw = (key, title, sub) => '<div class="switch"><div><b>' + title + '</b><small>' + sub + '</small></div><input type="checkbox" data-setting="' + key + '"' + (S.settings[key] ? ' checked' : '') + ' style="width:22px;height:22px"></div>';
     inner = '<div class="modal-h"><h2>Simulation Settings</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' +
       sw('live', 'Live Clock', 'When on, 5 simulated minutes pass every 20 real seconds. When off, time only moves when you act.') +
+      sw('career', 'Career Mode', 'Start with easier cases and unlock harder cases and new hospital areas as you rank up. Turn off for free play with every case open.') +
       sw('busy', 'Busy Shift Mode', 'Ambulances keep arriving and surprise events happen: mass-casualty crashes, a broken CT scanner, lab delays and short staffing.') +
       sw('glossary', 'Medical Word Helper', 'Medical words are underlined — tap one to see what it means.') +
       sw('arrivals', 'Ambulance Arrivals', 'A new patient arrives every ' + S.settings.arrivalEvery + ' simulated minutes (up to 8 active patients).') +
@@ -1461,6 +1596,7 @@ function route(hh) {
   else if (h.indexOf('#/report') === 0) ui.route = { name: 'report' };
   else if (h.indexOf('#/profile') === 0) ui.route = { name: 'profile' };
   else if (h.indexOf('#/history') === 0) ui.route = { name: 'history' };
+  else if (h.indexOf('#/leaderboard') === 0) ui.route = { name: 'leaderboard' };
   else if (/^#\/past\/[^/]+\/.+$/.test(h)) { const m2 = h.split('/'); ui.route = { name: 'past', shift: m2[2], pid: m2[3] }; }
   else if (h.indexOf('#/learn') === 0) { ui.route = { name: 'learn' }; const t = h.split('/')[2]; if (t) ui.eduTopic = t; }
   else ui.route = { name: 'dash' };
@@ -1504,6 +1640,8 @@ document.addEventListener('click', e => {
     case 'esi-pick': if (p) { ui.esiSel = ui.esiSel || {}; ui.esiSel[p.id] = +t.getAttribute('data-level'); ui.keepScroll = true; render(); } break;
     case 'triage-submit': if (p) { submitTriage(p); save(); render(); window.scrollTo(0, 0); } break;
     case 'triage-continue': if (p) { p.triageFb = null; save(); render(); window.scrollTo(0, 0); } break;
+    case 'daily-start': { const today = dateStr(); if (S.daily[today]) break; const dc = dailyCase(today); const np = admitCase(dc.id, false); np.daily = today; S.daily[today] = { pid: np.id, caseId: dc.id }; rec(np, 'update', 'Case of the Day for ' + today + '.'); save(); enterRoom(np.id); break; }
+    case 'lb-refresh': ui.lb = null; ui.lbLast = null; render(); break;
     case 'dx-open': if (p) { ui.modal = { type: 'dx', id: p.id }; renderModal(); } break;
     case 'dx-pick': if (p) { ui.dxSel = ui.dxSel || {}; ui.dxSel[p.id] = +t.getAttribute('data-i'); renderModal(); } break;
     case 'dx-submit': if (p && ui.dxSel && ui.dxSel[p.id] != null) { const ch = dxOptions(p)[ui.dxSel[p.id]]; p.dx = { choice: ch, ok: ch === caseOf(p).finalDiagnosis, at: p.decisionIndex }; rec(p, 'decision', 'Working diagnosis chosen: ' + ch); ui.modal = null; save(); ui.keepScroll = true; render(); } break;
@@ -1523,7 +1661,7 @@ document.addEventListener('click', e => {
     case 'discharge': if (p) { ui.modal = { type: 'discharge', id: p.id }; renderModal(); } break;
     case 'confirm-discharge': if (p) { confirmDischarge(p); ui.modal = null; ui.keepScroll = true; render(); } break;
     case 'reset': if (p) { ui.modal = { type: 'confirm', title: 'Restart Patient ' + p.num + '\'s Case?', text: 'This erases this patient\'s record and returns them to where their case began in this simulation. Other patients are not affected.', yes: 'Restart Case', fn: () => { resetPatient(p); render(); } }; renderModal(); } break;
-    case 'new-sim': ui.menu = null; ui.modal = { type: 'confirm', title: 'Start a New Simulation?', text: 'Your current shift (Shift #' + (S.shiftNo || 1) + ') will be saved in Past Shifts, where you can reopen every patient\'s record. A new shift then starts with the four starting patients. Your profile, career stats and education progress are kept.', yes: 'End Shift & Start New', fn: () => { archiveShift(); const keep = { edu: S.edu, career: S.career, profile: S.profile, settings: S.settings, history: S.history, shiftNo: (S.shiftNo || 1) + 1 }; newState(); Object.assign(S, keep); save(); go('#/'); } }; render(); break;
+    case 'new-sim': ui.menu = null; ui.modal = { type: 'confirm', title: 'Start a New Simulation?', text: 'Your current shift (Shift #' + (S.shiftNo || 1) + ') will be saved in Past Shifts, where you can reopen every patient\'s record. A new shift then starts with the four starting patients. Your profile, career stats and education progress are kept.', yes: 'End Shift & Start New', fn: () => { archiveShift(); const keep = { edu: S.edu, career: S.career, profile: S.profile, settings: S.settings, history: S.history, daily: S.daily, shiftNo: (S.shiftNo || 1) + 1 }; newState(); Object.assign(S, keep); save(); go('#/'); } }; render(); break;
     case 'confirm-yes': { const fn = ui.modal && ui.modal.fn; ui.modal = null; if (fn) fn(); else render(); break; }
     case 'signin': ui.menu = null; ui.signin = null; ui.modal = { type: 'signin' }; render(); setTimeout(() => { const el = document.getElementById('si-user'); if (el) el.focus(); }, 30); break;
     case 'signin-go': doSignIn(); break;
@@ -1597,10 +1735,10 @@ S = load();
 if (!S) { bootFresh = true; newState(); }
 function normalize() {
   S.edu = S.edu || { completed: {} };
-  S.settings = Object.assign({ soundOn: true, ambient: true, monitor: true, sound: true, volume: 0.7, glossary: true, busy: false }, S.settings);
+  S.settings = Object.assign({ soundOn: true, ambient: true, monitor: true, sound: true, volume: 0.7, glossary: true, busy: false, career: true }, S.settings);
   S.events = S.events || {};
   S.patients.forEach(p => { p.exam = p.exam || {}; });
-  S.history = S.history || []; S.shiftNo = S.shiftNo || 1;
+  S.history = S.history || []; S.shiftNo = S.shiftNo || 1; S.daily = S.daily || {};
   S.patients.forEach(p => { if (!p.mrn) p.mrn = newMrn(); });
   S.career = Object.assign({ correct: 0, incorrect: 0, discharged: 0, deaths: 0, exams: 0, rescues: 0, streak: 0, bestStreak: 0, perfect: 0, specs: [] }, S.career);
   S.profile = Object.assign({ name: '', specialty: 'Emergency Medicine', color: '#1d5fbf', icon: 'steth', motto: '', why: '', idNo: 'RVR-' + Math.floor(10000 + Math.random() * 89999) }, S.profile);
