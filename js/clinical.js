@@ -97,8 +97,31 @@ const IMAGES = {
   'xr-wrist-buckle': { kind: 'limb', label: 'Buckle fracture of the wrist' },
   'xr-hip-fracture': { kind: 'limb', label: 'Hip fracture' },
   'xr-tibia-fracture': { kind: 'limb', label: 'Fracture of the shin bone (tibia)' },
-  'xr-limb-normal': { kind: 'limb', label: 'Normal bones, no fracture' }
+  'xr-limb-normal': { kind: 'limb', label: 'Normal bones, no fracture' },
+  'ct-head-normal': { kind: 'cthead', label: 'Normal head CT (no bleeding seen)' },
+  'ct-head-subdural': { kind: 'cthead', label: 'Blood collected on the surface of the brain (subdural hematoma)' },
+  'ct-head-bleed': { kind: 'cthead', label: 'Bleeding inside the brain' },
+  'ct-head-stroke': { kind: 'cthead', label: 'Dark area from a blocked brain artery (stroke)' },
+  'ct-chest-normal': { kind: 'ctchest', label: 'Normal chest CT' },
+  'ct-chest-pe': { kind: 'ctchest', label: 'Clots in the lung arteries (pulmonary embolism)' },
+  'ct-chest-dissection': { kind: 'ctchest', label: 'Tear in the wall of the aorta (aortic dissection)' },
+  'ct-chest-pneumonia': { kind: 'ctchest', label: 'Pneumonia in one lung' },
+  'ct-abd-normal': { kind: 'ctabd', label: 'Normal abdomen CT' },
+  'ct-abd-spleen': { kind: 'ctabd', label: 'Torn spleen with bleeding around it' },
+  'ct-abd-stone-r': { kind: 'ctabd', label: 'Kidney stone blocking the tube from the kidney' },
+  'ct-abd-stone-l': { kind: 'ctabd', label: 'Kidney stone blocking the tube from the kidney' },
+  'ct-abd-appendicitis': { kind: 'ctabd', label: 'Swollen, inflamed appendix (appendicitis)' },
+  'us-fast': { kind: 'us', label: 'Free fluid (blood) next to the spleen' },
+  'us-tamponade': { kind: 'us', label: 'Large fluid collection squeezing the heart (tamponade)' },
+  'us-pericardial': { kind: 'us', label: 'Small amount of fluid around the heart' },
+  'us-gallstones': { kind: 'us', label: 'Gallstones in the gallbladder' },
+  'us-hydro': { kind: 'us', label: 'Swollen kidney with urine backed up (hydronephrosis)' },
+  'us-target': { kind: 'us', label: 'Target-shaped bowel (intussusception)' },
+  'us-dvt': { kind: 'us', label: 'Clot in a leg vein (DVT)' },
+  'us-aorta': { kind: 'us', label: 'Widened first part of the aorta' },
+  'us-no-sliding': { kind: 'us', label: 'No lung sliding (collapsed lung)' }
 };
+const KIND_NAMES = { ecg: 'ECG', cxr: 'X-ray', limb: 'X-ray', cthead: 'CT scan', ctchest: 'CT scan', ctabd: 'CT scan', us: 'ultrasound' };
 function readOptions(imageId) {
   const img = IMAGES[imageId]; if (!img) return null;
   const pool = []; Object.keys(IMAGES).forEach(k => { const l = IMAGES[k]; if (l.kind === img.kind && l.label !== img.label && pool.indexOf(l.label) < 0) pool.push(l.label); });
@@ -191,7 +214,10 @@ function limb(id) {
 }
 function drawImage(id, hr) {
   const img = IMAGES[id]; if (!img) return '';
-  return img.kind === 'ecg' ? drawECG(id, hr) : drawXray(id);
+  if (img.kind === 'ecg') return drawECG(id, hr);
+  if (img.kind.indexOf('ct') === 0) return window.ART ? ART.drawCT(id) : '';
+  if (img.kind === 'us') return window.ART ? ART.drawUS(id) : '';
+  return drawXray(id);
 }
 
 /* ───────── Medical word helper ───────── */
@@ -245,5 +271,5 @@ document.addEventListener('click', e => {
 }, true);
 window.addEventListener('scroll', hideTerm, { passive: true });
 
-window.CLIN = { TESTS: TESTS, isLab: isLab, normalResult: normalResult, IMAGES: IMAGES, readOptions: readOptions, drawImage: drawImage, applyGlossary: applyGlossary };
+window.CLIN = { KIND_NAMES: KIND_NAMES, TESTS: TESTS, isLab: isLab, normalResult: normalResult, IMAGES: IMAGES, readOptions: readOptions, drawImage: drawImage, applyGlossary: applyGlossary };
 })();

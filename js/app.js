@@ -594,7 +594,36 @@ function bodySvg(p) {
     return c;
   };
   const region = (k, shape) => '<g class="' + cls(k) + '" data-exam="' + k + '" data-id="' + p.id + '" role="button" tabindex="0" aria-label="Examine ' + REGIONS[k] + '"><title>' + REGIONS[k] + '</title>' + shape + '</g>';
-  return window.BODY.svg(ui.bodyLayer || 'skin', region);
+  const glows = Object.keys(ex).filter(k => ex[k].abnormal && k !== 'skin').map(k => findingSpots(k, ex[k].finding)).reduce((a, b) => a.concat(b), []);
+  const g = glows.map(q => '<circle class="glow" cx="' + q[0] + '" cy="' + q[1] + '" r="' + (q[2] || 13) + '" fill="url(#abn-glow)"/>').join('');
+  return window.BODY.svg(ui.bodyLayer || 'skin', region).replace('</svg>', '<defs><radialGradient id="abn-glow"><stop offset="0" stop-color="#ff3b3b" stop-opacity=".85"/><stop offset=".55" stop-color="#ff5a3c" stop-opacity=".35"/><stop offset="1" stop-color="#ff5a3c" stop-opacity="0"/></radialGradient></defs><g class="glows" pointer-events="none">' + g + '</g></svg>');
+}
+/* Where on the body diagram an abnormal finding should glow. Patient's right is on the viewer's left. */
+function findingSpots(region, text) {
+  const t = String(text || '').toLowerCase(), has = re => re.test(t);
+  const R = /\bright\b/, L = /\bleft\b/;
+  const side = (r, l, both) => has(R) && !has(L) ? r : has(L) && !has(R) ? l : both; // each argument is a list of spots
+  switch (region) {
+    case 'head': return [[120, 44, 16]];
+    case 'neck': return [[120, 84, 11]];
+    case 'heart': return [[127, 142, 13]];
+    case 'lungs': return side([[100, 138, 15]], [[140, 138, 15]], [[100, 138, 15], [140, 138, 15]]);
+    case 'abdomen':
+      if (has(/right lower|lower right|mcburney/)) return [[104, 222, 13]];
+      if (has(/left lower|lower left/)) return [[136, 222, 13]];
+      if (has(/right upper|upper right|under the right ribs|gallbladder|liver/)) return [[102, 182, 13]];
+      if (has(/left upper|upper left|spleen/)) return [[138, 184, 13]];
+      if (has(/upper middle|epigastr|upper belly|top of the belly|stomach/)) return [[120, 176, 13]];
+      if (has(/belly button|navel|around the middle/)) return [[120, 212, 13]];
+      if (has(/flank|kidney|side/)) return side([[96, 206, 12]], [[144, 206, 12]], [[96, 206, 12], [144, 206, 12]]);
+      return [[120, 200, 22]];
+    case 'pelvis': return side([[98, 262, 13]], [[142, 262, 13]], [[120, 252, 16]]);
+    case 'armR': return [has(/wrist|hand|finger/) ? [48, 252, 12] : has(/elbow/) ? [70, 190, 12] : [64, 160, 14]];
+    case 'armL': return [has(/wrist|hand|finger/) ? [192, 252, 12] : has(/elbow/) ? [170, 190, 12] : [176, 160, 14]];
+    case 'legR': return [has(/ankle|foot/) ? [104, 470, 12] : has(/knee/) ? [98, 370, 12] : has(/calf|shin/) ? [101, 420, 14] : has(/hip|thigh/) ? [98, 300, 14] : [100, 380, 18]];
+    case 'legL': return [has(/ankle|foot/) ? [136, 470, 12] : has(/knee/) ? [142, 370, 12] : has(/calf|shin/) ? [139, 420, 14] : has(/hip|thigh/) ? [142, 300, 14] : [140, 380, 18]];
+  }
+  return [];
 }
 function layerBar() {
   const L = ui.bodyLayer || 'skin';
@@ -691,8 +720,8 @@ function imagingCard(p, im, idx) {
   const pic = '<div class="read-img">' + CLIN.drawImage(im.image, hr) + '</div>';
   const head = '<b>' + esc(tc(im.name)) + '</b> <span class="mono small muted">' + fmtClock(im.t) + '</span>';
   if (im.readState === 'pending' && im.readQ) {
-    const isX = CLIN.IMAGES[im.image].kind !== 'ecg';
-    return '<div class="img-card read"><div class="read-body">' + head + pic + '<div class="read-q"><b>Read it yourself first:</b> what does this ' + (isX ? 'X-ray' : 'ECG') + ' show?' + (isX ? ' <span class="small muted">(On X-rays, the patient\'s right side is on your left — marked R.)</span>' : '') + '</div>' +
+    const kind = CLIN.IMAGES[im.image].kind, kname = (CLIN.KIND_NAMES || {})[kind] || 'image', sided = kind !== 'ecg' && kind !== 'us';
+    return '<div class="img-card read"><div class="read-body">' + head + pic + '<div class="read-q"><b>Read it yourself first:</b> what does this ' + kname + ' show?' + (sided ? ' <span class="small muted">(On X-rays and CT scans, the patient\'s right side is on your left — marked R.)</span>' : kind === 'us' ? ' <span class="small muted">(On ultrasound, fluid looks black and stones or bone look bright white.)</span>' : '') + '</div>' +
       '<div class="read-opts">' + im.readQ.options.map((o, i) => '<button class="btn btn-sm" data-read="' + idx + '" data-choice="' + i + '" data-id="' + p.id + '">' + esc(o) + '</button>').join('') + '</div></div></div>';
   }
   return '<div class="img-card read"><div class="read-body">' + head + pic + (im.readState === 'done' ? '<div class="qres ' + (im.readOk ? 'good' : 'bad') + '">' + (im.readOk ? '✓ You read it correctly: ' : '✗ You said "' + esc(im.readChoice) + '". It shows: ') + esc(im.readQ.answer) + '.</div>' : '') + '<p><b>Report:</b> ' + esc(im.result) + '</p></div></div>';
@@ -831,7 +860,7 @@ function codePanel(p) {
 function arrestMonitor(p) {
   let d = 'M0 40'; for (let x = 0; x <= 600; x += 6) d += ' L' + x + ' ' + (40 + Math.sin(x * 0.21) * 14 * Math.sin(x * 0.037 + 1) + Math.sin(x * 0.53) * 5).toFixed(1);
   return '<div class="monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + ' · PATIENT ' + p.num + '</span><span>' + fmtClock(S.clock) + '</span></div>' +
-    '<div class="ecg"><svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%"><g class="track" style="--shift:-300px;animation-duration:3s"><path d="' + d + '" fill="none" stroke="#f87171" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g></svg></div>' +
+    (window.ART ? '<div class="waves">' + ART.monitorWaves({ arrest: true }) + '</div>' : '<div class="ecg"><svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%"><g class="track" style="--shift:-300px;animation-duration:3s"><path d="' + d + '" fill="none" stroke="#f87171" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g></svg></div>') +
     '<div class="mon-off" style="height:auto;padding:18px 0;color:#f87171;font-size:22px;font-weight:800">NO PULSE · CARDIAC ARREST<br><span style="font-size:13px;color:#8ea3c4">Chaotic heart rhythm — start CPR</span></div></div>';
 }
 function finishCpr(pid, res) {
@@ -873,7 +902,8 @@ function checkPromotion() {
 function promoModal(m) {
   const items = []; for (let l = m.from + 1; l <= m.to; l++) (window.CAREER_UNLOCKS[l] || []).forEach(x => items.push(x));
   const unlockedN = LIB.filter(c => unlockLevel(c) <= m.to).length;
-  return '<div class="modal-h"><h2>🎉 Promoted to ' + esc(rankName(m.to)) + '!</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b promo">' +
+  return (window.ART ? ART.confetti(70) : '') + '<div class="modal-h"><h2>🎉 Promoted to ' + esc(rankName(m.to)) + '!</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b promo">' +
+    (window.ART ? '<div class="promo-ins">' + ART.insignia(m.from, 64) + '<span class="arrow">→</span><span class="new">' + ART.insignia(m.to, 110) + '</span></div>' : '') +
     '<p>Congratulations, ' + esc(S.profile.name ? 'Dr. ' + S.profile.name : 'Doctor') + '! Your hard work in the ER has earned you a promotion.</p>' +
     (items.length ? '<div class="panel-title">Newly Unlocked</div><ul class="unlock-list">' + items.map(x => '<li>🔓 ' + esc(x) + '</li>').join('') + '</ul>' : '') +
     (careerOn() ? '<p class="small muted">' + unlockedN + ' of ' + LIB.length + ' cases are now open to you.</p>' : '') + '</div>' +
@@ -1080,7 +1110,7 @@ function syncSound() {
     if (p && !isClosed(p)) {
       const v = vitals(p);
       const lvl = (p.rescueActive || p.status === 'Critical') ? 2 : (['hr', 'sbp', 'spo2', 'rr'].some(k => abnormal(k, v[k], p.age)) ? 1 : 0);
-      r = { hr: p.arrest ? 0 : v.hr, spo2: v.spo2, level: lvl, rhythm: p.caseId.indexOf('afib') >= 0 ? 'irregular' : 'regular' };
+      r = { hr: p.arrest ? 0 : v.hr, spo2: v.spo2, level: lvl, rhythm: rhythmOf(p) === 'afib' ? 'irregular' : 'regular' };
     }
   }
   SND.setRoom(r);
@@ -1173,6 +1203,7 @@ function viewDash() {
   const waitingN = active.filter(p => currentDecision(p) && !p.feedback).length;
   const tot = S.stats.correct + S.stats.incorrect;
   const crit = active.filter(p => p.status === 'Critical' || p.status === 'Unstable').length;
+  const mapView = !!window.ART && S.settings.dashView === 'map';
   let h = '<div class="page-head"><div><h1>Emergency Department — Waiting Room</h1><p>Shift #' + (S.shiftNo || 1) + ' · ' + active.length + ' active patient' + (active.length === 1 ? '' : 's') + ' · ' + fmtDay(S.clock) + ', ' + fmtClock(S.clock) + '</p></div>' +
     '<div class="row"><button class="btn" data-act="observe-all" title="Let 15 simulated minutes pass for every patient">' + icon('hourglass', 18) + 'Advance 15 Min</button><button class="btn btn-primary" data-go="#/library">' + icon('plus', 18) + 'Add Patient</button></div></div>';
   h += '<div class="stats">' +
@@ -1183,13 +1214,19 @@ function viewDash() {
     stat('Discharged', closed.filter(p => p.outcome === 'discharged').length, 'safely') +
     stat('Deaths', closed.filter(p => p.outcome === 'deceased').length, 'this simulation') + '</div>';
   h += '<div class="toolbar"><label class="small muted" for="sort">Sort By</label><select id="sort" data-change="sort"><option value="priority"' + (ui.sort === 'priority' ? ' selected' : '') + '>Priority (Sickest First)</option><option value="number"' + (ui.sort === 'number' ? ' selected' : '') + '>Patient Number</option></select>' +
-    '<span class="small muted">Time moves when you make decisions, observe, move between rooms, or with the Live clock on.</span></div>';
+    '<span class="small muted">Time moves when you make decisions, observe, move between rooms, or with the Live clock on.</span>' +
+    (window.ART ? '<div class="seg" role="tablist" aria-label="Waiting room view"><button role="tab" class="' + (mapView ? '' : 'on') + '" aria-selected="' + !mapView + '" data-act="dashview" data-v="cards">' + icon('list', 16) + 'Cards</button><button role="tab" class="' + (mapView ? 'on' : '') + '" aria-selected="' + mapView + '" data-act="dashview" data-v="map">' + icon('body', 16) + 'Floor Map</button></div>' : '') + '</div>';
   if (accountsAvailable() && !account) h += '<div class="prof-cta">' + icon('body', 22) + '<div><b>Playing as a Guest</b><div class="small">Your game saves in this browser only. Sign in to save it to your account and play on any device.</div></div><button class="btn btn-primary btn-sm" data-act="signin">Sign In</button></div>';
   if (account && account.error) h += '<div class="prof-cta" style="border-color:var(--crit);color:var(--crit)">' + icon('info', 22) + '<div><b>Account Save Problem</b><div class="small">' + esc(account.error) + '</div></div></div>';
   h += dailyCard();
   h += eventsBanner();
   if (!S.profile.name) h += '<div class="prof-cta">' + icon('steth', 22) + '<div><b>Create Your Doctor Profile</b><div class="small">Pick your name, scrub color and dream specialty. Earn XP and rank up from Medical Student to Chief of the ER.</div></div><button class="btn btn-primary btn-sm" data-go="#/profile">Set Up Profile</button></div>';
-  h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
+  if (mapView && sorted.length) {
+    const ambA = S.alerts.find(a => /ambulance arrival|by ambulance/i.test(a.kind) && S.clock - a.t <= 20);
+    const amb = ambA ? (ui.ambSeen === ambA.id ? 'park' : 'drive') : null; if (ambA) ui.ambSeen = ambA.id; // drive in once, then stay parked
+    h += '<div class="panel map-panel">' + ART.floorMap(sorted, { ctDown: eventActive('ctDown'), ambulance: amb, needs: p => !!(p.needsTriage || talkDue(p) || (currentDecision(p) && !p.feedback)) }) +
+      '<div class="map-legend small"><span><i style="background:#c62828"></i>Critical</span><span><i style="background:#d9640a"></i>Unstable</span><span><i style="background:#a67c00"></i>Needs Assessment</span><span><i style="background:#0f7c8c"></i>Improving</span><span><i style="background:#2e7d32"></i>Stable</span><span><i style="background:#1d5fbf"></i>Waiting for you</span><b>Click a patient to enter their room.</b></div></div>';
+  } else h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
   if (closed.length) h += '<h2 class="section-h">Completed cases</h2><div class="grid">' + closed.map(card).join('') + '</div>';
   return h;
 }
@@ -1209,7 +1246,7 @@ function card(p) {
   else wait = '<div class="waiting ok">' + icon('check', 16) + 'Decisions Complete — Evaluate for Discharge</div>';
   const vc = (lab, key, val) => '<div class="vcell' + (v && abnormal(key, v[key], p.age) ? ' ab' : '') + '"><div class="l">' + lab + '</div><div class="n">' + val + '</div></div>';
   return '<article class="pcard ' + statusClass(p.status) + '">' +
-    '<div class="pc-body"><div class="pc-top"><span class="pnum">PATIENT ' + p.num + (p.returning ? ' <span class="ret" title="Returning patient">↩ Return</span>' : '') + '</span><span class="badge ' + statusClass(p.status) + '">' + p.status + '</span></div>' +
+    '<div class="pc-body"><div class="pc-top">' + (window.ART ? '<span class="pc-face">' + ART.portrait(p, 46) + '</span>' : '') + '<span class="pnum">PATIENT ' + p.num + (p.returning ? ' <span class="ret" title="Returning patient">↩ Return</span>' : '') + '</span><span class="badge ' + statusClass(p.status) + '">' + p.status + '</span></div>' +
     '<div class="pmeta">Age ' + p.age + ' · ' + (p.sex === 'F' ? 'Female' : 'Male') + ' · ' + esc(p.bed) + ' · ' + (isClosed(p) ? 'Under care ' + fmtDur(p.outcomeTime - p.arrival) : 'In ED ' + fmtDur(S.clock - p.arrival)) + '</div>' +
     '<div class="pcond"><span class="ic">' + icon(c.specialty, 20) + '</span><div><b>' + esc(c.suspected) + '</b><span>' + esc(tc(c.chiefComplaint)) + '</span><div class="row" style="margin-top:4px;gap:6px"><span class="diff diff-' + c.difficulty + '">' + c.difficulty + '</span><span class="spec">' + c.specialty + '</span></div></div></div>' +
     (v ? '<div class="vgrid">' + vc('HR', 'hr', v.hr) + vc('BP', 'sbp', v.sbp + '/' + v.dbp) + vc('SpO₂', 'spo2', v.spo2 + '%') + vc('RR', 'rr', v.rr) + vc('TEMP', 'temp', fmtTemp(v.temp)) + '</div>' : '') +
@@ -1224,10 +1261,11 @@ function viewRoom(id) {
   if (!p) return '<div class="panel empty">Patient not found. <button class="btn" data-go="#/">Return to waiting room</button></div>';
   const c = caseOf(p);
   let h = '<div class="roombar"><button class="btn btn-primary" data-go="#/">' + icon('back', 18) + 'RETURN TO WAITING ROOM</button>' +
-    '<div class="who"><b>Patient ' + p.num + '</b> <span class="badge ' + statusClass(p.status) + '">' + p.status + '</span><div>Age ' + p.age + ' · ' + (p.sex === 'F' ? 'F' : 'M') + ' · ' + esc(p.bed) + ' · ' + esc(c.suspected) + '</div></div>' +
+    (window.ART ? '<span class="who-face">' + ART.portrait(p, 52) + '</span>' : '') + '<div class="who"><b>Patient ' + p.num + '</b> <span class="badge ' + statusClass(p.status) + '">' + p.status + '</span><div>Age ' + p.age + ' · ' + (p.sex === 'F' ? 'F' : 'M') + ' · ' + esc(p.bed) + ' · ' + esc(c.suspected) + '</div></div>' +
     '<div class="timer"><span class="muted small">Time Under Care</span><b>' + fmtDur((isClosed(p) ? p.outcomeTime : S.clock) - p.arrival) + '</b></div>' +
     '<button class="btn btn-danger" data-act="discharge" data-id="' + p.id + '">' + icon('exit', 18) + 'DISCHARGE PATIENT</button></div>';
   h += '<div class="room">' +
+    (window.ART ? '<section class="a-scene panel">' + roomScene(p) + '</section>' : '') +
     '<section class="a-mon">' + monitor(p) + '</section>' +
     '<section class="a-exam panel">' + examPanel(p) + '</section>' +
     '<section class="a-dec panel">' + dxStrip(p) + decisionPanel(p) + '</section>' +
@@ -1254,6 +1292,19 @@ function ecgPath(hr) {
   }
   return d;
 }
+function roomScene(p) {
+  const eq = ART.equipment(p), v = vitals(p) || {};
+  const names = Object.keys(ART.EQUIP_NAMES).filter(k => eq[k]).map(k => ART.EQUIP_NAMES[k]);
+  return ART.scene(p, { eq: eq, hr: v.hr, clock: S.clock }) +
+    '<div class="scene-cap">' + (isClosed(p) ? (p.outcome === 'discharged' ? 'Room ready for the next patient.' : 'The family is given privacy.') : names.length ? '<b>In the room:</b> ' + names.map(esc).join(' · ') : '') + '</div>';
+}
+function rhythmOf(p) {
+  const e = (extrasOf(p).tests || {}).ecg, img = (e && e.image) || '';
+  if (img === 'ecg-afib' || p.caseId.indexOf('afib') >= 0) return 'afib';
+  if (img === 'ecg-heart-block') return 'heart-block';
+  if (img === 'ecg-low-voltage') return 'low-voltage';
+  return 'sinus';
+}
 function monitor(p) {
   const v = vitals(p);
   if (!v) return '<div class="monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + '</span><span>MONITOR</span></div><div class="mon-off">Monitoring discontinued.<br>Time of death ' + fmtClock(p.outcomeTime) + '.</div></div>';
@@ -1263,9 +1314,9 @@ function monitor(p) {
   const al = (k) => abnormal(k, v[k], p.age) ? ' alarm' : '';
   const sev = Math.round(p.severity);
   return '<div class="monitor" aria-label="Patient monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + ' · PATIENT ' + p.num + '</span><span>' + fmtClock(S.clock) + '</span></div>' +
-    '<div class="ecg"><svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%"><g class="track" style="--shift:-300px;animation-duration:' + dur + 's"><path d="' + ecgPath(v.hr) + '" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g></svg></div>' +
+    (window.ART ? '<div class="waves">' + ART.monitorWaves({ rhythm: rhythmOf(p), hr: v.hr, spo2: v.spo2, rr: v.rr, sbp: v.sbp, seed: p.id }) + '</div>' : '<div class="ecg"><svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%"><g class="track" style="--shift:-300px;animation-duration:' + dur + 's"><path d="' + ecgPath(v.hr) + '" fill="none" stroke="#4ade80" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g></svg></div>') +
     '<div class="mon-grid">' +
-      '<div class="mv hr' + al('hr') + '"><div class="l">HR</div><div class="n">' + v.hr + '</div><div class="u">beats/min</div></div>' +
+      '<div class="mv hr' + al('hr') + '"><div class="l">HR <span class="beat" style="animation-duration:' + (60 / Math.max(20, v.hr)).toFixed(2) + 's">♥</span></div><div class="n">' + v.hr + '</div><div class="u">beats/min</div></div>' +
       '<div class="mv bp' + al('sbp') + '"><div class="l">NIBP</div><div class="n">' + v.sbp + '/' + v.dbp + '</div><div class="u">mmHg</div></div>' +
       '<div class="mv sp' + al('spo2') + '"><div class="l">SpO₂</div><div class="n">' + v.spo2 + '</div><div class="u">%</div></div>' +
       '<div class="mv rr' + al('rr') + '"><div class="l">RESP</div><div class="n">' + v.rr + '</div><div class="u">breaths/min</div></div>' +
@@ -1629,6 +1680,7 @@ document.addEventListener('click', e => {
     case 'menu-alerts': ui.menu = ui.menu === 'alerts' ? null : 'alerts'; renderTop(); break;
     case 'menu-main': ui.menu = ui.menu === 'main' ? null : 'main'; renderTop(); break;
     case 'clear-alerts': S.alerts.forEach(a => { a.read = true; }); ui.menu = null; save(); render(); break;
+    case 'dashview': S.settings.dashView = t.getAttribute('data-v'); save(); ui.keepScroll = true; render(); break;
     case 'layer': ui.bodyLayer = t.getAttribute('data-layer'); ui.keepScroll = true; render(); break;
     case 'return-cur': { const np = p ? returnVisit(p, false) : null; save(); if (np) enterRoom(np.id); break; }
     case 'return-past': { const a = findArchived(t.getAttribute('data-shift'), t.getAttribute('data-pid')); const np = a ? returnVisit(a.p, false) : null; save(); if (np) enterRoom(np.id); break; }

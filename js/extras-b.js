@@ -9,7 +9,7 @@ window.CASE_EXTRAS['c-trauma-spleen-01'] = {
   esi: 2,
   esiWhy: 'A high-energy crash with left rib and belly pain and a fast pulse is high risk for hidden bleeding, even though he is talking and his blood pressure is still normal.',
   tests: {
-    us_bedside: { useful: true, report: 'FAST scan positive: free fluid around the spleen, between the spleen and the left kidney. No fluid around the heart.' },
+    us_bedside: { useful: true, image: 'us-fast', report: 'FAST scan positive: free fluid around the spleen, between the spleen and the left kidney. No fluid around the heart.' },
     cbc: { useful: true,
       results: [
         { name: 'Hemoglobin', value: '14.1 g/dL', flag: '', ref: '13.5–17.5' },
@@ -40,7 +40,7 @@ window.CASE_EXTRAS['c-trauma-spleen-01'] = {
       { name: 'INR (clotting time)', value: '1.1', flag: '', ref: '0.9–1.2' },
       { name: 'Fibrinogen', value: '2.6 g/L', flag: '', ref: '2.0–4.0' }
     ] },
-    ct_abd: { useful: true, report: 'Deep laceration of an enlarged spleen with a large amount of blood around it. Liver and kidneys intact. Two left lower rib fractures.' },
+    ct_abd: { useful: true, image: 'ct-abd-spleen', report: 'Deep laceration of an enlarged spleen with a large amount of blood around it. Liver and kidneys intact. Two left lower rib fractures.' },
     cxr: { useful: true, report: 'Fractures of two left lower ribs. No collapsed lung and no blood around the lungs. Heart and middle of the chest look normal.' },
     ct_head: { useful: false, why: 'He wore a helmet, never lost consciousness, and is fully alert with a normal neurological exam, so a head scan adds radiation without changing his care.' },
     mri: { useful: false, report: 'Torn, enlarged spleen with blood around it — the same answer a CT gives much faster.', why: 'An MRI takes far too long for a patient who may be bleeding inside; ultrasound and a quick CT answer the question.' },
@@ -72,7 +72,7 @@ window.CASE_EXTRAS['c-trauma-headbleed-01'] = {
   esi: 2,
   esiWhy: 'Although she looks well, an older adult on a blood thinner who has hit her head is high risk for bleeding inside the skull and should not wait.',
   tests: {
-    ct_head: { useful: true, report: 'Thin crescent of blood over the right side of the brain (small subdural hematoma). No shift of the brain.',
+    ct_head: { useful: true, image: 'ct-head-subdural', report: 'Thin crescent of blood over the right side of the brain (small subdural hematoma). No shift of the brain.',
       stages: [ { from: 3, report: 'The subdural hematoma has grown and is now pushing the brain slightly to the left.' } ] },
     coag: { useful: true, results: [
       { name: 'INR (clotting time)', value: '2.8', flag: 'H', ref: '0.9–1.1 (not on thinner)' }
@@ -210,8 +210,8 @@ window.CASE_EXTRAS['c-peds-intuss-01'] = {
   esi: 2,
   esiWhy: 'A pale, drowsy infant with signs of dehydration and episodes of severe pain is high risk and should be seen right away.',
   tests: {
-    us_formal: { useful: true, report: 'Target-shaped mass in the right upper abdomen consistent with intussusception. Blood flow present. No free fluid.' },
-    us_bedside: { useful: true, report: 'A possible target-shaped mass in the right upper belly. A formal ultrasound by an experienced operator is needed to confirm it.' },
+    us_formal: { useful: true, image: 'us-target', report: 'Target-shaped mass in the right upper abdomen consistent with intussusception. Blood flow present. No free fluid.' },
+    us_bedside: { useful: true, image: 'us-target', report: 'A possible target-shaped mass in the right upper belly. A formal ultrasound by an experienced operator is needed to confirm it.' },
     glucose: { useful: true, results: [ { name: 'Glucose (finger-prick)', value: '72 mg/dL', flag: '', ref: '60–110' } ] },
     bmp: { useful: true, results: [
       { name: 'Sodium', value: '136 mmol/L', flag: '', ref: '135–145' },
@@ -290,8 +290,8 @@ window.CASE_EXTRAS['d-cardio-dissection-01'] = {
   tests: {
     ecg: { useful: true, report: 'Fast regular rhythm with signs of a thickened heart muscle from long-term high blood pressure. No ST elevation.', image: 'ecg-sinus-tach' },
     cxr: { useful: true, report: 'The middle part of the chest (mediastinum) looks wider than expected. Lungs clear.', image: 'cxr-wide-mediastinum' },
-    ct_chest: { useful: true, report: 'CT angiogram: a tear in the inner wall of the aorta starting just above the heart (Type A dissection) and extending down into the chest. The branch to the left arm is partly narrowed. Small amount of fluid around the heart.' },
-    us_bedside: { useful: true, report: 'The first part of the aorta looks widened. A small amount of fluid around the heart, which is still filling normally.',
+    ct_chest: { useful: true, image: 'ct-chest-dissection', report: 'CT angiogram: a tear in the inner wall of the aorta starting just above the heart (Type A dissection) and extending down into the chest. The branch to the left arm is partly narrowed. Small amount of fluid around the heart.' },
+    us_bedside: { useful: true, image: 'us-aorta', report: 'The first part of the aorta looks widened. A small amount of fluid around the heart, which is still filling normally.',
       stages: [ { from: 4, report: 'More fluid around the heart than before, beginning to squeeze the heart. The first part of the aorta looks widened.' } ] },
     troponin: { useful: true, results: [ { name: 'Troponin (heart muscle damage marker)', value: 'Normal', flag: '', ref: 'Normal: very low' } ] },
     cbc: { useful: true, results: [
@@ -309,7 +309,7 @@ window.CASE_EXTRAS['d-cardio-dissection-01'] = {
       { name: 'Blood group', value: 'B positive', flag: '', ref: '—' },
       { name: 'Crossmatched red cell units', value: 'Ready for theatre', flag: '', ref: '—' }
     ] },
-    echo: { useful: true, report: 'The first part of the aorta is widened, with a flap from the tear seen inside it. Small amount of fluid around the heart; the heart squeezes normally.',
+    echo: { useful: true, image: 'us-aorta', report: 'The first part of the aorta is widened, with a flap from the tear seen inside it. Small amount of fluid around the heart; the heart squeezes normally.',
       stages: [ { from: 4, report: 'More fluid around the heart than before, beginning to squeeze the heart. The first part of the aorta is widened with a flap inside it.' } ] },
     dimer: { useful: false, results: [ { name: 'D-dimer', value: 'Raised', flag: 'H', ref: 'Negative' } ], why: 'It would probably be raised, but it cannot confirm a dissection; his high-risk features already mean he needs a CT now.' },
     mri: { useful: false, report: 'Tear in the wall of the aorta just above the heart — the same answer the CT gives in minutes.', why: 'An MRI takes too long and moves a high-risk patient far from the resus team; CT gives the answer in minutes.' }
@@ -378,7 +378,7 @@ window.CASE_EXTRAS['d-resp-pneumothorax-01'] = {
         { from: 3, report: 'Very large left pneumothorax with the heart and windpipe pushed to the right (tension). This must be treated immediately, without waiting for imaging.', image: 'cxr-pneumothorax-left' },
         { from: 4, report: 'Chest drain in place on the left. The left lung has re-expanded. Windpipe back in the middle.', image: 'cxr-normal' }
       ] },
-    us_bedside: { useful: true, report: 'No normal lung sliding on the left side, which fits air around the lung. Normal lung sliding on the right.',
+    us_bedside: { useful: true, image: 'us-no-sliding', report: 'No normal lung sliding on the left side, which fits air around the lung. Normal lung sliding on the right.',
       stages: [ { from: 4, report: 'Lung sliding has returned on the left with the chest drain in place. Normal lung sliding on the right.' } ] },
     ecg: { useful: true, report: 'Sinus tachycardia at about 98 beats per minute, otherwise normal.', image: 'ecg-sinus-tach',
       stages: [ { from: 3, report: 'Sinus tachycardia at about 128 beats per minute. No signs of a heart attack.', image: 'ecg-sinus-tach' },
@@ -413,7 +413,7 @@ window.CASE_EXTRAS['d-neuro-sah-01'] = {
   esi: 2,
   esiWhy: 'A sudden "worst ever" headache with vomiting, a stiff neck and high blood pressure could be a brain bleed, so she must be seen right away.',
   tests: {
-    ct_head: { useful: true, report: 'No definite blood seen. Brain fluid spaces normal size. No mass. Reported as "no acute abnormality", but the scan was done about 12 hours after the headache began.',
+    ct_head: { useful: true, image: 'ct-head-normal', report: 'No definite blood seen. Brain fluid spaces normal size. No mass. Reported as "no acute abnormality", but the scan was done about 12 hours after the headache began.',
       stages: [ { from: 4, report: 'The fluid spaces in the brain (ventricles) have enlarged — hydrocephalus. No new bleeding.' } ] },
     coag: { useful: true, results: [ { name: 'INR (clotting time)', value: '1.0', flag: '', ref: '0.9–1.2' } ] },
     cbc: { useful: true, results: [
@@ -460,12 +460,12 @@ window.CASE_EXTRAS['d-cardio-tamponade-01'] = {
   tests: {
     ecg: { useful: true, report: 'Fast regular rhythm. Small (low-voltage) complexes, and the size of each beat alternates slightly from beat to beat.', image: 'ecg-low-voltage',
       stages: [ { from: 3, report: 'Regular rhythm at about 92. The complexes are a little bigger than before drainage.', image: 'ecg-normal' } ] },
-    us_bedside: { useful: true, report: 'Large collection of fluid all around the heart. The right-sided heart chambers are being squashed and collapse inward with each beat.',
+    us_bedside: { useful: true, image: 'us-tamponade', report: 'Large collection of fluid all around the heart. The right-sided heart chambers are being squashed and collapse inward with each beat.',
       stages: [
         { from: 3, report: 'After drainage: only a small amount of fluid remains. The heart chambers fill normally.' },
         { from: 4, report: 'Fluid is building up around the heart again and the right side is starting to collapse inward.' }
       ] },
-    echo: { useful: true, report: 'Large fluid collection around the heart with collapse of the right-sided chambers, confirming tamponade. The heart muscle itself squeezes normally.',
+    echo: { useful: true, image: 'us-tamponade', report: 'Large fluid collection around the heart with collapse of the right-sided chambers, confirming tamponade. The heart muscle itself squeezes normally.',
       stages: [
         { from: 3, report: 'Only a small amount of fluid remains around the heart. Heart chambers fill and squeeze normally.' },
         { from: 4, report: 'The fluid around the heart has built up again and is pressing on the right side of the heart.' }

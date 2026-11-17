@@ -334,13 +334,13 @@ window.CASE_EXTRAS['a-pe-travel-01'] = {
       stages: [ { from: 4, report: 'Sinus tachycardia, rate 132, with new signs of strain on the right side of the heart.', image: 'ecg-sinus-tach' } ]
     },
     cxr: { useful: true, report: 'Normal. Clear lungs, no collapse, no fluid, normal heart size.', image: 'cxr-normal' },
-    ct_chest: { useful: true, report: 'CT pulmonary angiogram: multiple clots in the arteries of both lungs. The right side of the heart looks enlarged and strained.' },
+    ct_chest: { useful: true, image: 'ct-chest-pe', report: 'CT pulmonary angiogram: multiple clots in the arteries of both lungs. The right side of the heart looks enlarged and strained.' },
     us_bedside: {
       useful: true,
       report: 'Right ventricle dilated and working hard. Left side of the heart normal. No fluid around the heart.',
       stages: [ { from: 4, report: 'Right ventricle even larger and squeezing poorly; it is pushing on the left side of the heart.' } ]
     },
-    us_formal: { useful: true, report: 'Leg vein ultrasound: clot in the deep veins of the left calf extending up behind the knee.' },
+    us_formal: { useful: true, image: 'us-dvt', report: 'Leg vein ultrasound: clot in the deep veins of the left calf extending up behind the knee.' },
     troponin: { useful: true, results: [ { name: 'Troponin (heart muscle marker)', value: 'Mildly raised', flag: 'H', ref: 'Normal: very low' } ] },
     cbc: {
       useful: true,
@@ -644,8 +644,8 @@ window.CASE_EXTRAS['b-urosepsis-01'] = {
       ]
     },
     cultures: { useful: true, report: 'Blood and urine cultures sent to the lab. Results in about 48 hours.' },
-    us_bedside: { useful: true, report: 'Bedside kidney ultrasound: the right kidney is swollen with a widened, blocked drainage system (hydronephrosis). Left kidney normal.' },
-    ct_abd: { useful: true, report: 'A kidney stone is blocking the right ureter, with a swollen right kidney (hydronephrosis). No other source of infection.' },
+    us_bedside: { useful: true, image: 'us-hydro', report: 'Bedside kidney ultrasound: the right kidney is swollen with a widened, blocked drainage system (hydronephrosis). Left kidney normal.' },
+    ct_abd: { useful: true, image: 'ct-abd-stone-r', report: 'A kidney stone is blocking the right ureter, with a swollen right kidney (hydronephrosis). No other source of infection.' },
     cxr: { useful: true, report: 'Clear lungs with no pneumonia or fluid. Normal heart size.', image: 'cxr-normal' },
     ct_head: { useful: false, why: 'She has no fall, head injury or weakness on one side; her confusion is explained by the infection and should improve as it is treated.' },
     dimer: { useful: false, why: 'Infection pushes D-dimer up, so a raised result here would only distract from the real problem.' }
@@ -698,7 +698,7 @@ window.CASE_EXTRAS['b-meningitis-01'] = {
         { name: 'Glucose', value: '112 mg/dL', flag: '', ref: '70–140' }
       ]
     },
-    ct_head: { useful: true, report: 'Head CT: no bleeding, mass or signs of dangerous brain shift.' },
+    ct_head: { useful: true, image: 'ct-head-normal', report: 'Head CT: no bleeding, mass or signs of dangerous brain shift.' },
     mri: { useful: false, why: 'An MRI takes too long for someone this sick; when a scan is needed, a quick CT answers the safety question.' },
     ua: { useful: false, why: 'He has no urinary symptoms; the source of infection is clearly the brain lining, so a urine test will not change anything.' },
     xr_limb: { useful: false, why: 'The purple spots are a skin sign of bloodstream infection, not an injury, so a limb X-ray shows nothing useful.' }
