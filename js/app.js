@@ -291,6 +291,7 @@ function trendRate(p) {
     if (p.rescueActive) r = Math.max(r, 1) * 1.2;
   }
   if (p.severity >= 75 && r > 0 && !p.rescueActive) r *= 1.2;
+  if (r > 0 && String(p.bed).indexOf('Hall') === 0) r *= 1.15;
   return r;
 }
 function computeStatus(p) {
@@ -335,6 +336,7 @@ function createPatient(caseId, seed) {
     arrival: S.clock - elapsed, severity: startSev, decisionIndex: 0, assessed: false,
     trend: null, rescueActive: false, order: null, feedback: null, outcome: null, outcomeTime: null,
     labs: [], imaging: [], updates: [], record: [], log: [], vh: [], firedEvents: [],
+    needsTriage: !!seed.generated, triageSev: startSev, orders: [], talkDone: false,
     mrn: seed.mrn || newMrn(), returning: !!seed.returning, prevNum: seed.prevNum || null,
     exam: {}, lastDecisionAt: null, offset: null, offsetSev: 0, seed: seed.keep ? seed : null, generated: !!seed.generated
   };
@@ -483,7 +485,9 @@ function advanceTime(mins, reason) {
     const step = Math.min(5, left); left -= step; S.clock += step;
     S.patients.forEach(p => { if (!isClosed(p)) tickPatient(p, step); });
     if (S.clock % 10 === 0) S.patients.forEach(p => { if (!isClosed(p)) snapshot(p); });
-    if (S.settings.arrivals && S.clock >= S.nextArrival) {
+    deliverOrders();
+    if (S.settings.busy && S.clock >= (S.nextEventAt || 0)) { S.nextEventAt = S.clock + 150 + Math.round(Math.random() * 90); triggerShiftEvent(); }
+    if ((S.settings.arrivals || S.settings.busy) && S.clock >= S.nextArrival) {
       S.nextArrival = S.clock + (S.settings.arrivalEvery || 90);
       if (S.patients.filter(p => !isClosed(p)).length < 8) { const back = returnCandidates(); if (back.length && Math.random() < 0.3) returnVisit(back[Math.floor(Math.random() * back.length)], true); else admitRandom(true); }
     }
@@ -600,6 +604,172 @@ function examPanel(p) {
     (list ? '<details class="exam-log"' + (n <= 4 ? ' open' : '') + '><summary>Examination Findings (' + n + ')</summary><ul>' + list + '</ul></details>' : '');
 }
 
+/* ───────── Ordering tests, reading images, conversations, triage, shift events ───────── */
+function extrasOf(p) { return (window.CASE_EXTRAS || {})[p.caseId] || {}; }
+function testEntry(p, id) {
+  const e = (extrasOf(p).tests || {})[id]; if (!e) return null;
+  let out = Object.assign({}, e);
+  (e.stages || []).forEach(st => { if (p.decisionIndex >= st.from) out = Object.assign({}, out, st); });
+  return out;
+}
+function eventActive(k) { return !!(S.events && S.events[k] && S.clock < S.events[k]); }
+function orderTest(p, id) {
+  const T = window.CLIN && CLIN.TESTS[id]; if (!T || isClosed(p)) return;
+  if (T.scanner === 'ct' && eventActive('ctDown')) { ui.orderMsg = { pid: p.id, text: 'The CT scanner is down until ' + fmtClock(S.events.ctDown) + '. Choose another test or come back later.' }; return; }
+  p.orders = p.orders || [];
+  if (p.orders.some(o => o.test === id && !o.done)) return;
+  let mins = T.minutes; if (CLIN.isLab(id) && eventActive('labSlow')) mins *= 2;
+  const e = (extrasOf(p).tests || {})[id], useful = !!(e && e.useful);
+  p.orders.push({ id: uid(), test: id, at: S.clock, readyAt: S.clock + 1 + mins, done: false, useful: useful });
+  S.career[useful ? 'goodTests' : 'extraTests'] = (S.career[useful ? 'goodTests' : 'extraTests'] || 0) + 1;
+  rec(p, 'order', 'Ordered ' + T.name + ' (results in about ' + mins + ' min).');
+  ui.orderMsg = null;
+  advanceTime(1);
+}
+function deliverOrders() {
+  S.patients.forEach(p => {
+    if (isClosed(p) || !p.orders) return;
+    p.orders.forEach(o => { if (!o.done && S.clock >= o.readyAt) { o.done = true; deliverResult(p, o); } });
+  });
+}
+function deliverResult(p, o) {
+  const T = CLIN.TESTS[o.test], e = testEntry(p, o.test), v = vitals(p) || {};
+  const r = (e && (e.results || e.report)) ? e : CLIN.normalResult(o.test, p, v);
+  const note = (e && e.useful === false && e.why) ? e.why : (!e ? "This test probably wasn't needed for this patient's problem." : '');
+  o.note = note;
+  if (r.results) r.results.forEach(l => { p.labs.push(Object.assign({ t: S.clock }, l)); rec(p, 'lab', l.name + ': ' + l.value + (l.flag ? ' (' + l.flag + ')' : '')); });
+  else {
+    const image = r.image || (e && e.image) || null;
+    p.imaging.push({ t: S.clock, name: T.name, result: r.report, image: image, readState: image ? 'pending' : null, readQ: image ? CLIN.readOptions(image) : null });
+    rec(p, 'imaging', T.name + ' — ' + r.report);
+  }
+  addUpdate(p, T.name + ' result is back.' + (note ? ' Note: ' + note : ''), note ? 'info' : 'result');
+  const inRoom = ui.route.name === 'room' && ui.route.id === p.id;
+  S.alerts.unshift({ id: uid(), pid: p.id, num: p.num, t: S.clock, kind: 'Results ready', text: T.name + ' results are ready for Patient ' + p.num + '.', status: p.status, read: inRoom, quiet: true });
+}
+function submitRead(p, idx, choiceIdx) {
+  const im = p.imaging[idx]; if (!im || im.readState !== 'pending' || !im.readQ) return;
+  const choice = im.readQ.options[choiceIdx], ok = choice === im.readQ.answer;
+  im.readState = 'done'; im.readChoice = choice; im.readOk = ok;
+  S.career.reads = (S.career.reads || 0) + 1; if (ok) S.career.readsOk = (S.career.readsOk || 0) + 1;
+  rec(p, 'imaging', 'You read the ' + im.name + ': "' + choice + '" — ' + (ok ? 'correct.' : 'not quite. It showed: ' + im.readQ.answer + '.'));
+}
+function ordersPanel(p) {
+  if (!window.CLIN || isClosed(p)) return '';
+  const T = CLIN.TESTS, orders = p.orders || [];
+  const pend = orders.filter(o => !o.done);
+  const group = g => Object.keys(T).filter(k => T[k].group === g).map(k => {
+    const busy = pend.some(o => o.test === k), down = T[k].scanner === 'ct' && eventActive('ctDown');
+    return '<button class="order-btn' + (busy ? ' busy' : '') + '" data-order="' + k + '" data-id="' + p.id + '"' + (busy ? ' disabled' : '') + ' title="Results in about ' + T[k].minutes + ' min' + (T[k].radiation === 'high' ? ' · higher radiation' : '') + '">' + esc(T[k].name) + (T[k].radiation === 'high' ? ' <span class="rad" title="Higher radiation">☢</span>' : '') + (down ? ' <span class="small">(down)</span>' : '') + '</button>';
+  }).join('');
+  const msg = ui.orderMsg && ui.orderMsg.pid === p.id ? '<div class="qres bad">' + esc(ui.orderMsg.text) + '</div>' : '';
+  return '<details class="orders"' + (ui.ordersOpen ? ' open' : '') + '><summary data-act="orders-toggle">' + icon('flask', 18) + '<b>Order Tests</b><span class="small muted">' + (pend.length ? pend.length + ' pending' : 'choose what you need — each takes real time') + '</span></summary>' + msg +
+    '<div class="order-grp"><div class="order-h">Labs</div>' + group('Labs') + '</div><div class="order-grp"><div class="order-h">Heart &amp; Imaging</div>' + group('Heart & Imaging') + '</div></details>' +
+    (pend.length ? '<div class="pending">' + pend.map(o => '<span class="pend"><span class="dot"></span>' + esc(T[o.test].name) + ' · ready ' + fmtClock(o.readyAt) + '</span>').join('') + '</div>' : '');
+}
+function imagingCard(p, im, idx) {
+  const hr = (vitals(p) || {}).hr;
+  if (!im.image || !window.CLIN) return '<div class="img-card"><div class="img-thumb">' + imgThumb(im.name) + '</div><div><b>' + esc(tc(im.name)) + '</b> <span class="mono small muted">' + fmtClock(im.t) + '</span><p>' + esc(im.result) + '</p></div></div>';
+  const pic = '<div class="read-img">' + CLIN.drawImage(im.image, hr) + '</div>';
+  const head = '<b>' + esc(tc(im.name)) + '</b> <span class="mono small muted">' + fmtClock(im.t) + '</span>';
+  if (im.readState === 'pending' && im.readQ) {
+    const isX = CLIN.IMAGES[im.image].kind !== 'ecg';
+    return '<div class="img-card read"><div class="read-body">' + head + pic + '<div class="read-q"><b>Read it yourself first:</b> what does this ' + (isX ? 'X-ray' : 'ECG') + ' show?' + (isX ? ' <span class="small muted">(On X-rays, the patient\'s right side is on your left — marked R.)</span>' : '') + '</div>' +
+      '<div class="read-opts">' + im.readQ.options.map((o, i) => '<button class="btn btn-sm" data-read="' + idx + '" data-choice="' + i + '" data-id="' + p.id + '">' + esc(o) + '</button>').join('') + '</div></div></div>';
+  }
+  return '<div class="img-card read"><div class="read-body">' + head + pic + (im.readState === 'done' ? '<div class="qres ' + (im.readOk ? 'good' : 'bad') + '">' + (im.readOk ? '✓ You read it correctly: ' : '✗ You said "' + esc(im.readChoice) + '". It shows: ') + esc(im.readQ.answer) + '.</div>' : '') + '<p><b>Report:</b> ' + esc(im.result) + '</p></div></div>';
+}
+/* Conversations */
+function talkDue(p) { const t = extrasOf(p).talk; return !!(t && !p.talkDone && !isClosed(p) && !p.rescueActive && !p.feedback && !p.needsTriage && p.decisionIndex >= t.afterDecision); }
+function talkPanel(p) {
+  const t = extrasOf(p).talk; p.talkOrder = p.talkOrder || shuffle([0, 1, 2, 3]);
+  const sel = (ui.talkSel || {})[p.id];
+  return '<div class="dec"><div class="dec-head"><div><div class="dec-step">Conversation · Bedside Manner</div><h2>' + esc(tc(t.title)) + '</h2></div><span class="small muted">' + icon('clock', 14) + ' takes ~5 sim min</span></div>' +
+    '<div class="findings talk-sit"><b>' + esc(t.who) + ':</b> ' + esc(t.situation) + '</div><div class="question">' + esc(t.question) + '</div>' +
+    '<div class="opts">' + p.talkOrder.map((oi, pos) => '<button class="opt' + (sel === oi ? ' sel' : '') + '" data-act="talk-pick" data-i="' + oi + '" data-id="' + p.id + '"><span class="L">' + LET[pos] + '</span><span>' + esc(t.options[oi].text) + '</span></button>').join('') + '</div>' +
+    '<div class="submit-row"><span class="small muted">How you talk to patients and families matters as much as the medicine.</span><button class="btn btn-blue btn-lg" data-act="talk-submit" data-id="' + p.id + '"' + (sel == null ? ' disabled' : '') + '>SUBMIT RESPONSE</button></div></div>';
+}
+function submitTalk(p) {
+  const t = extrasOf(p).talk, i = (ui.talkSel || {})[p.id]; if (!t || i == null) return;
+  const opt = t.options[i], best = t.options.find(o => o.correct);
+  p.talkDone = true; ui.talkSel[p.id] = null;
+  S.career.talks = (S.career.talks || 0) + 1; if (opt.correct) S.career.talkOk = (S.career.talkOk || 0) + 1;
+  p.log.push({ t: S.clock, n: 'Conversation', title: t.title, question: t.question, chosen: opt.text, correct: opt.correct, correctText: best.text, talk: true });
+  rec(p, 'talk', 'Conversation with ' + t.who.toLowerCase() + ': ' + (opt.correct ? 'handled well' : 'could have gone better') + '.', { detail: 'You said: ' + opt.text });
+  advanceTime(5);
+  p.talkFb = { correct: opt.correct, chosen: opt.text, feedback: opt.feedback, best: best.text, bestFeedback: best.feedback, who: t.who };
+}
+function talkFbView(p) {
+  const f = p.talkFb;
+  return '<div class="dec"><div class="dec-step">Conversation — result</div><div class="verdict ' + (f.correct ? 'good' : 'bad') + '"><div>' + icon(f.correct ? 'check' : 'x', 28) + '</div><div><h3>' + (f.correct ? 'Great Communication' : 'That Could Have Gone Better') + '</h3><div>You said: ' + esc(f.chosen) + '</div></div></div>' +
+    '<div class="explain"><h4>Why</h4>' + esc(f.feedback) + '</div>' + (f.correct ? '' : '<div class="explain" style="border-color:var(--stab)"><h4>A Better Response</h4><b>' + esc(f.best) + '</b><div style="margin-top:6px">' + esc(f.bestFeedback) + '</div></div>') +
+    '<div class="submit-row"><span></span><button class="btn btn-primary btn-lg" data-act="talk-continue" data-id="' + p.id + '">Continue →</button></div></div>';
+}
+/* Triage */
+const ESI = [[1, 'Resuscitation', 'Needs life-saving help right now'], [2, 'Emergent', 'High risk or very unwell — should not wait'], [3, 'Urgent', 'Stable, but needs several tests or treatments'], [4, 'Less Urgent', 'Stable, needs one simple test or treatment'], [5, 'Non-Urgent', 'Stable, needs only an exam and advice']];
+function correctEsi(p) {
+  const e = extrasOf(p).esi; if (e) return e;
+  const c = caseOf(p), s = p.triageSev != null ? p.triageSev : p.severity;
+  return s >= 75 ? 1 : s >= 50 ? 2 : (c.canDie && s >= 30) ? 2 : s >= 20 ? 3 : 4;
+}
+function triagePanel(p) {
+  const c = caseOf(p), v = p.initialVitals || vitals(p), sel = (ui.esiSel || {})[p.id];
+  const first = String(c.presentation || '').split(/(?<=\.)\s/).slice(0, 2).join(' ');
+  return '<div class="dec"><div class="dec-head"><div><div class="dec-step">Triage · New Arrival</div><h2>How Urgent Is This Patient?</h2></div><span class="small muted">' + icon('clock', 14) + ' takes ~2 sim min</span></div>' +
+    '<div class="findings triage-desc"><b>Arrival:</b> ' + esc(first) + '<br><b>Vital signs:</b> <span class="mono">' + esc(vitalsText(v)) + '</span></div>' +
+    '<div class="question">Assign a triage level (Emergency Severity Index):</div><div class="esi">' +
+    ESI.map(x => '<button class="esi-btn esi-' + x[0] + (sel === x[0] ? ' sel' : '') + '" data-act="esi-pick" data-level="' + x[0] + '" data-id="' + p.id + '"><b>' + x[0] + '</b><span><strong>' + x[1] + '</strong><small>' + x[2] + '</small></span></button>').join('') + '</div>' +
+    '<div class="submit-row"><span class="small muted">Tip: look at the vital signs and how sick the patient seems — not just the complaint.</span><button class="btn btn-blue btn-lg" data-act="triage-submit" data-id="' + p.id + '"' + (sel == null ? ' disabled' : '') + '>ASSIGN LEVEL</button></div></div>';
+}
+function submitTriage(p) {
+  const level = (ui.esiSel || {})[p.id]; if (level == null) return;
+  const ok = correctEsi(p), diff = level - ok, c = caseOf(p);
+  let effect = 0, msg;
+  if (diff === 0) msg = 'Correct triage level.';
+  else if (diff > 0) { effect = diff >= 2 ? 10 : 4; msg = 'Under-triaged: you rated this patient less urgent than they are, so they waited longer than they should have.'; }
+  else msg = 'Over-triaged: safe for this patient, but it uses a high-priority bed that another patient might need.';
+  p.needsTriage = false; p.triage = { level: level, correct: ok };
+  if (effect) p.severity = clamp(p.severity + effect, 0, cap(c));
+  S.career.triages = (S.career.triages || 0) + 1; if (!diff) S.career.triageOk = (S.career.triageOk || 0) + 1;
+  rec(p, 'triage', 'Triage level ' + level + ' assigned (correct level: ' + ok + ').' + (effect ? ' Patient waited longer because of under-triage.' : ''));
+  ui.esiSel[p.id] = null;
+  advanceTime(2);
+  updateStatus(p);
+  p.triageFb = { level: level, ok: ok, msg: msg, why: extrasOf(p).esiWhy || '', effect: effect };
+}
+function triageFbView(p) {
+  const f = p.triageFb, good = f.level === f.ok;
+  return '<div class="dec"><div class="dec-step">Triage — result</div><div class="verdict ' + (good ? 'good' : 'bad') + '"><div>' + icon(good ? 'check' : 'x', 28) + '</div><div><h3>' + (good ? 'Correct: Level ' + f.ok : 'You Chose Level ' + f.level + ' — Correct Was Level ' + f.ok) + '</h3><div>' + esc(f.msg) + '</div></div></div>' +
+    (f.why ? '<div class="explain"><h4>Why Level ' + f.ok + '</h4>' + esc(f.why) + '</div>' : '') +
+    '<div class="submit-row"><span></span><button class="btn btn-primary btn-lg" data-act="triage-continue" data-id="' + p.id + '">Start Treatment →</button></div></div>';
+}
+/* Busy-shift events */
+function triggerShiftEvent() {
+  S.events = S.events || {};
+  const kinds = ['mci', 'ctDown', 'labSlow', 'shortStaff'], k = kinds[Math.floor(Math.random() * kinds.length)];
+  const hospAlert = (kind, text) => { S.alerts.unshift({ id: uid(), pid: null, num: '', t: S.clock, kind: kind, text: text, status: 'Unstable', read: false }); ui.beep = true; };
+  if (k === 'mci') {
+    const active = S.patients.filter(p => !isClosed(p)).length;
+    const room = Math.max(0, 10 - active), n = Math.min(3, room);
+    if (!n) { hospAlert('Ambulance diversion', 'A multi-vehicle crash nearby, but the ER is full — ambulances are being sent to another hospital.'); return; }
+    let pool = shuffle(LIB.filter(c => c.specialty === 'Trauma' || c.specialty === 'Orthopedics'));
+    for (let i = 0; i < n && pool.length; i++) admitCase(pool[i % pool.length].id, true);
+    S.alerts.forEach((a, i) => { if (i < n && a.kind === 'New ambulance arrival') a.quiet = true; }); // one combined alert instead of n pop-ups
+    hospAlert('MASS CASUALTY', 'Multi-vehicle crash nearby: ' + n + ' patients have just arrived at once. Triage them quickly!');
+  } else if (k === 'ctDown') { S.events.ctDown = S.clock + 60; hospAlert('CT scanner down', 'The CT scanner is broken until ' + fmtClock(S.events.ctDown) + '. Plan around it.'); }
+  else if (k === 'labSlow') { S.events.labSlow = S.clock + 90; hospAlert('Lab backlog', 'The lab is overloaded: blood test results take twice as long until ' + fmtClock(S.events.labSlow) + '.'); }
+  else { S.events.shortStaff = S.clock + 90; hospAlert('Short-staffed', 'Two nurses called in sick: treatments take 50% longer until ' + fmtClock(S.events.shortStaff) + '.'); }
+}
+function eventsBanner() {
+  const ev = [];
+  if (eventActive('ctDown')) ev.push('CT scanner down until ' + fmtClock(S.events.ctDown));
+  if (eventActive('labSlow')) ev.push('Lab results delayed until ' + fmtClock(S.events.labSlow));
+  if (eventActive('shortStaff')) ev.push('Short-staffed until ' + fmtClock(S.events.shortStaff));
+  const hall = S.patients.filter(p => !isClosed(p) && String(p.bed).indexOf('Hall') === 0).length;
+  if (hall) ev.push(hall + ' patient' + (hall > 1 ? 's' : '') + ' waiting in the hallway (no beds)');
+  return ev.length ? '<div class="events-banner">' + icon('info', 18) + '<b>Hospital Status:</b> ' + ev.map(esc).join(' · ') + '</div>' : '';
+}
+
 /* ───────── Actions ───────── */
 function submitDecision(p, optIdx) {
   const c = caseOf(p), isRescue = p.rescueActive, d = currentDecision(p);
@@ -623,7 +793,7 @@ function submitDecision(p, optIdx) {
   else p.decisionIndex++;
   p.order = null; ui.selected[p.id] = null;
   const t0 = S.clock;
-  advanceTime(d.timeCost);
+  advanceTime(Math.round(d.timeCost * (eventActive('shortStaff') ? 1.5 : 1)));
   if (p.outcome !== 'deceased') {
     if (!isRescue || opt.correct) applyResults(p, d.results, opt.correct ? '' : 'After senior review, the team corrected course. ');
     p.lastDecisionAt = S.clock;
@@ -652,6 +822,7 @@ function dischargeEval(p) {
     { label: 'Vital signs acceptable', pass: !!v && v.spo2 >= 93 && v.sbp >= (p.age < 12 ? 80 : 90) && v.hr <= (p.age < 12 ? 140 : 110) && v.temp < 38.3, detail: v ? vitalsText(v) : '' },
     { label: 'Stability status is Stable or Improving', pass: p.status === 'Stable' || p.status === 'Improving', detail: 'Current status: ' + p.status + '.' },
     examCheck(p),
+    { label: 'Conversation with the patient or family completed', pass: !extrasOf(p).talk || !!p.talkDone, detail: 'There is still an important conversation to have with this patient or their family.' },
     { label: 'Observed for at least 15 minutes after the last treatment', pass: observed >= 15, detail: observed >= 15 ? '' : 'Only ' + Math.max(0, observed) + ' minutes since the last intervention. Use "Observe 15 min" before discharge.' }
   ];
   return { ok: checks.every(x => x.pass), checks: checks, disp: disp };
@@ -725,6 +896,7 @@ function render() {
   else if (r.name === 'past') html = viewPastRecord(r.shift, r.pid);
   else html = viewDash();
   document.getElementById('app').innerHTML = convTemps(html);
+  if (window.CLIN && S.settings.glossary !== false) { try { CLIN.applyGlossary(document.getElementById('app')); } catch (e) { } }
   renderModal();
   if (ui.keepScroll) window.scrollTo(0, y);
   ui.keepScroll = false;
@@ -777,12 +949,12 @@ function mainDropdown() {
 }
 function renderToasts() {
   const inRoom = ui.route.name === 'room' ? ui.route.id : null;
-  const list = S.alerts.filter(a => !a.read && a.pid !== inRoom).slice(0, window.innerWidth < 700 ? 1 : 3);
+  const list = S.alerts.filter(a => !a.read && !a.quiet && (a.pid == null || a.pid !== inRoom)).slice(0, window.innerWidth < 700 ? 1 : 3);
   document.getElementById('toasts').innerHTML = convTemps(list.map(a => {
     const em = ['Critical', 'Unstable', 'Deceased'].indexOf(a.status) >= 0 || a.kind === 'EMERGENCY';
-    return '<div class="toast ' + statusClass(a.status) + '" role="alert"><div class="toast-h">' + icon('bell', 16) + (em ? 'EMERGENCY ALERT' : 'ALERT') + ' · PATIENT ' + a.num + '<span style="margin-left:auto" class="mono">' + fmtClock(a.t) + '</span></div>' +
+    return '<div class="toast ' + statusClass(a.status) + '" role="alert"><div class="toast-h">' + icon('bell', 16) + (em ? 'EMERGENCY ALERT' : 'ALERT') + (a.pid ? ' · PATIENT ' + a.num : ' · HOSPITAL') + '<span style="margin-left:auto" class="mono">' + fmtClock(a.t) + '</span></div>' +
       '<div class="toast-b"><b>' + esc(a.kind) + '</b> — ' + esc(a.text) + '<div class="small muted" style="margin-top:4px">Current Severity: <b>' + esc(a.status) + '</b></div></div>' +
-      '<div class="toast-f">' + (a.status !== 'Deceased' ? '<button class="btn btn-sm btn-danger" data-room="' + a.pid + '">Enter Patient ' + a.num + '\'s Room</button>' : '<button class="btn btn-sm" data-record="' + a.pid + '">View Record</button>') + '<button class="btn btn-sm" data-dismiss="' + a.id + '">Dismiss</button></div></div>';
+      '<div class="toast-f">' + (!a.pid ? '' : a.status !== 'Deceased' ? '<button class="btn btn-sm btn-danger" data-room="' + a.pid + '">Enter Patient ' + a.num + '\'s Room</button>' : '<button class="btn btn-sm" data-record="' + a.pid + '">View Record</button>') + '<button class="btn btn-sm" data-dismiss="' + a.id + '">Dismiss</button></div></div>';
   }).join(''));
 }
 
@@ -807,6 +979,7 @@ function viewDash() {
     '<span class="small muted">Time moves when you make decisions, observe, move between rooms, or with the Live clock on.</span></div>';
   if (accountsAvailable() && !account) h += '<div class="prof-cta">' + icon('body', 22) + '<div><b>Playing as a Guest</b><div class="small">Your game saves in this browser only. Sign in to save it to your account and play on any device.</div></div><button class="btn btn-primary btn-sm" data-act="signin">Sign In</button></div>';
   if (account && account.error) h += '<div class="prof-cta" style="border-color:var(--crit);color:var(--crit)">' + icon('info', 22) + '<div><b>Account Save Problem</b><div class="small">' + esc(account.error) + '</div></div></div>';
+  h += eventsBanner();
   if (!S.profile.name) h += '<div class="prof-cta">' + icon('steth', 22) + '<div><b>Create Your Doctor Profile</b><div class="small">Pick your name, scrub color and dream specialty. Earn XP and rank up from Medical Student to Chief of the ER.</div></div><button class="btn btn-primary btn-sm" data-go="#/profile">Set Up Profile</button></div>';
   h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
   if (closed.length) h += '<h2 class="section-h">Completed cases</h2><div class="grid">' + closed.map(card).join('') + '</div>';
@@ -821,6 +994,8 @@ function card(p) {
   else if (p.outcome === 'discharged') wait = '<div class="waiting ok">' + icon('check', 16) + esc((c.disposition || {}).label || 'Discharged') + '</div>';
   else if (p.rescueActive) wait = '<div class="waiting em"><span class="dot"></span>EMERGENCY Intervention Required</div>';
   else if (p.feedback) wait = '<div class="waiting none">' + icon('eye', 16) + 'Review Result of Your Last Decision</div>';
+  else if (p.needsTriage) wait = '<div class="waiting em"><span class="dot"></span>New Arrival — Needs Triage</div>';
+  else if (talkDue(p)) wait = '<div class="waiting"><span class="dot"></span>Patient or Family Wants to Talk</div>';
   else if (d) wait = '<div class="waiting"><span class="dot"></span>Decision ' + (p.decisionIndex + 1) + ' Waiting for the Doctor</div>';
   else wait = '<div class="waiting ok">' + icon('check', 16) + 'Decisions Complete — Evaluate for Discharge</div>';
   const vc = (lab, key, val) => '<div class="vcell' + (v && abnormal(key, v[key], p.age) ? ' ab' : '') + '"><div class="l">' + lab + '</div><div class="n">' + val + '</div></div>';
@@ -930,12 +1105,12 @@ function infoPanel(p) {
 }
 function resultsPanel(p) {
   const labs = p.labs.slice().reverse(), imgs = p.imaging.slice().reverse();
-  let h = '<div class="panel-title">' + icon('flask', 18) + 'Laboratory results</div>';
+  let h = ordersPanel(p) + '<div class="panel-title">' + icon('flask', 18) + 'Laboratory results</div>';
   h += labs.length ? '<table class="labs"><thead><tr><th>Test</th><th>Result</th><th>Ref.</th><th>Time</th></tr></thead><tbody>' +
     labs.map(l => '<tr><td>' + esc(tc(l.name)) + '</td><td><b>' + esc(l.value) + '</b> ' + (l.flag ? '<span class="flag flag-' + l.flag + '">' + ({ H: 'HIGH', L: 'LOW', C: 'CRITICAL' }[l.flag] || l.flag) + '</span>' : '') + '</td><td class="small muted">' + esc(l.ref || '') + '</td><td class="mono small muted">' + fmtClock(l.t) + '</td></tr>').join('') + '</tbody></table>'
     : '<p class="muted small">No laboratory results yet.</p>';
   h += '<div class="panel-title" style="margin-top:18px">' + icon('scan', 18) + 'Imaging &amp; tests</div>';
-  h += imgs.length ? imgs.map(im => '<div class="img-card"><div class="img-thumb">' + imgThumb(im.name) + '</div><div><b>' + esc(tc(im.name)) + '</b> <span class="mono small muted">' + fmtClock(im.t) + '</span><p>' + esc(im.result) + '</p></div></div>').join('')
+  h += imgs.length ? imgs.map(im => imagingCard(p, im, p.imaging.indexOf(im))).join('')
     : '<p class="muted small">No imaging performed yet.</p>';
   return h;
 }
@@ -959,7 +1134,11 @@ function decisionPanel(p) {
   if (p.outcome === 'discharged') {
     return '<div class="outcome"><div class="big" style="background:var(--stab-bg);color:var(--stab)">' + icon('check', 32) + '</div><h2>Case Complete</h2><p class="muted">' + esc((c.disposition || {}).label) + ' at ' + fmtClock(p.outcomeTime) + '.</p>' + debrief(p) + '</div>';
   }
+  if (p.needsTriage) return triagePanel(p);
+  if (p.triageFb) return triageFbView(p);
+  if (p.talkFb) return talkFbView(p);
   if (p.feedback) return feedbackView(p);
+  if (talkDue(p)) return talkPanel(p);
   const d = currentDecision(p);
   if (!d) {
     return '<div class="dec"><div class="dec-step">All decisions complete</div><h2>Final Evaluation</h2><div class="findings">You have completed every clinical decision for this case. Before discharge, the patient must be observed, reach a safe level of stability, and pass the discharge-readiness evaluation.</div>' +
@@ -994,10 +1173,20 @@ function feedbackView(p) {
   h += '<div class="submit-row"><span></span><button class="btn btn-primary btn-lg" data-act="continue" data-id="' + p.id + '">' + next + ' →</button></div></div>';
   return h;
 }
+function debriefExtras(p) {
+  const o = p.orders || [], good = o.filter(x => x.useful).length, extra = o.length - good;
+  const reads = p.imaging.filter(im => im.readState === 'done'), readOk = reads.filter(im => im.readOk).length;
+  let h = '';
+  if (p.triage) h += '<h4 style="margin-top:10px">Triage</h4>You chose level ' + p.triage.level + ' (correct: ' + p.triage.correct + ').';
+  if (o.length) h += '<h4 style="margin-top:10px">Tests Ordered</h4>' + good + ' useful, ' + extra + ' not needed.';
+  if (reads.length) h += '<h4 style="margin-top:10px">Images You Read</h4>' + readOk + ' of ' + reads.length + ' read correctly.';
+  const talk = p.log.find(l => l.talk); if (talk) h += '<h4 style="margin-top:10px">Bedside Manner</h4>' + (talk.correct ? 'Handled the conversation well.' : 'The conversation could have gone better.');
+  return h;
+}
 function debrief(p) {
   const c = caseOf(p), ok = p.log.filter(l => l.correct && !l.pre).length, all = p.log.filter(l => !l.pre).length;
   return '<div class="explain" style="text-align:left;margin-top:14px"><h4>Final Diagnosis</h4><b>' + esc(c.finalDiagnosis) + '</b><h4 style="margin-top:10px">Key Learning Points</h4>' + esc(c.teaching) +
-    '<h4 style="margin-top:10px">Your Decisions This Shift</h4>' + (all ? ok + ' of ' + all + ' correct' : 'No decisions made this shift') + '</div>' +
+    '<h4 style="margin-top:10px">Your Decisions This Shift</h4>' + (all ? ok + ' of ' + all + ' correct' : 'No decisions made this shift') + debriefExtras(p) + '</div>' +
     '<div class="row" style="justify-content:center;margin-top:12px"><button class="btn" data-record="' + p.id + '">' + icon('list', 18) + 'Full Medical Record</button></div>';
 }
 
@@ -1007,7 +1196,7 @@ function viewRecord(id, archivedP, shift) {
   if (!p) return '<div class="panel empty">Record not found.</div>';
   const c = caseOf(p);
   const fl = ui.recFilter;
-  const groups = { all: null, decision: ['decision', 'intervention'], results: ['lab', 'imaging', 'exam'], updates: ['update', 'presentation', 'vitals'], status: ['status', 'alert', 'outcome'] };
+  const groups = { all: null, decision: ['decision', 'intervention', 'talk', 'triage'], results: ['lab', 'imaging', 'exam', 'order'], updates: ['update', 'presentation', 'vitals'], status: ['status', 'alert', 'outcome'] };
   const items = p.record.filter(r => !groups[fl] || groups[fl].indexOf(r.type) >= 0);
   const cor = p.log.filter(l => l.correct).length;
   const endT = p.archived ? (p.outcomeTime || p.endClock) : (isClosed(p) ? p.outcomeTime : S.clock);
@@ -1164,6 +1353,8 @@ function renderModal() {
     const sw = (key, title, sub) => '<div class="switch"><div><b>' + title + '</b><small>' + sub + '</small></div><input type="checkbox" data-setting="' + key + '"' + (S.settings[key] ? ' checked' : '') + ' style="width:22px;height:22px"></div>';
     inner = '<div class="modal-h"><h2>Simulation Settings</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' +
       sw('live', 'Live Clock', 'When on, 5 simulated minutes pass every 20 real seconds. When off, time only moves when you act.') +
+      sw('busy', 'Busy Shift Mode', 'Ambulances keep arriving and surprise events happen: mass-casualty crashes, a broken CT scanner, lab delays and short staffing.') +
+      sw('glossary', 'Medical Word Helper', 'Medical words are underlined — tap one to see what it means.') +
       sw('arrivals', 'Ambulance Arrivals', 'A new patient arrives every ' + S.settings.arrivalEvery + ' simulated minutes (up to 8 active patients).') +
       '<div class="switch"><div><b>Temperature Units</b><small>Show body temperatures in Celsius or Fahrenheit everywhere in the simulator.</small></div><select id="set-temp" data-tempunit><option value="C"' + (useF() ? '' : ' selected') + '>Celsius</option><option value="F"' + (useF() ? ' selected' : '') + '>Fahrenheit</option></select></div>' +
       sw('soundOn', 'Hospital Sounds', 'Master switch for every sound in the simulator.') +
@@ -1199,11 +1390,13 @@ function route(hh) {
 /* ───────── Events ───────── */
 function findP(el) { return S.patients.find(x => x.id === el.getAttribute('data-id')); }
 document.addEventListener('click', e => {
-  const t = e.target.closest('[data-exam],[data-listen],[data-go],[data-act],[data-room],[data-record],[data-pick],[data-dismiss],[data-admit],[data-recf]');
+  const t = e.target.closest('[data-order],[data-read],[data-exam],[data-listen],[data-go],[data-act],[data-room],[data-record],[data-pick],[data-dismiss],[data-admit],[data-recf]');
   if (!t) { if (ui.menu) { ui.menu = null; renderTop(); } return; }
   if (t.hasAttribute('data-go')) { ui.modal = null; go(t.getAttribute('data-go')); return; }
   if (t.hasAttribute('data-room')) { ui.modal = null; enterRoom(t.getAttribute('data-room')); return; }
   if (t.hasAttribute('data-record')) { ui.modal = null; ui.recFilter = 'all'; go('#/record/' + t.getAttribute('data-record')); return; }
+  if (t.hasAttribute('data-order')) { const p = findP(t); if (p) { ui.ordersOpen = true; orderTest(p, t.getAttribute('data-order')); save(); ui.keepScroll = true; render(); } return; }
+  if (t.hasAttribute('data-read')) { const p = findP(t); if (p) { submitRead(p, +t.getAttribute('data-read'), +t.getAttribute('data-choice')); save(); ui.keepScroll = true; render(); } return; }
   if (t.hasAttribute('data-exam')) { const p = findP(t); if (p) clickRegion(p, t.getAttribute('data-exam')); return; }
   if (t.hasAttribute('data-listen')) { const p = findP(t); if (p && window.SND) { const v = vitals(p); SND.exam(t.getAttribute('data-listen'), v ? v.hr : 80); } return; }
   if (t.hasAttribute('data-recf')) { ui.recFilter = t.getAttribute('data-recf'); ui.keepScroll = true; render(); return; }
@@ -1219,6 +1412,13 @@ document.addEventListener('click', e => {
     case 'return-cur': { const np = p ? returnVisit(p, false) : null; save(); if (np) enterRoom(np.id); break; }
     case 'return-past': { const a = findArchived(t.getAttribute('data-shift'), t.getAttribute('data-pid')); const np = a ? returnVisit(a.p, false) : null; save(); if (np) enterRoom(np.id); break; }
     case 'del-shift': { const sid = t.getAttribute('data-shift'); ui.modal = { type: 'confirm', title: 'Delete this past shift?', text: 'Its patient records will be removed from Past Shifts. Your career stats are not affected.', yes: 'Delete Shift', fn: () => { S.history = (S.history || []).filter(h => h.id !== sid); save(); render(); } }; renderModal(); break; }
+    case 'orders-toggle': ui.ordersOpen = !ui.ordersOpen; break;
+    case 'talk-pick': if (p) { ui.talkSel = ui.talkSel || {}; ui.talkSel[p.id] = +t.getAttribute('data-i'); ui.keepScroll = true; render(); } break;
+    case 'talk-submit': if (p) { submitTalk(p); save(); render(); window.scrollTo(0, 0); } break;
+    case 'talk-continue': if (p) { p.talkFb = null; save(); render(); window.scrollTo(0, 0); } break;
+    case 'esi-pick': if (p) { ui.esiSel = ui.esiSel || {}; ui.esiSel[p.id] = +t.getAttribute('data-level'); ui.keepScroll = true; render(); } break;
+    case 'triage-submit': if (p) { submitTriage(p); save(); render(); window.scrollTo(0, 0); } break;
+    case 'triage-continue': if (p) { p.triageFb = null; save(); render(); window.scrollTo(0, 0); } break;
     case 'toggle-sound': S.settings.soundOn = S.settings.soundOn === false; if (window.SND) SND.unlock(); save(); renderTop(); syncSound(); break;
     case 'toggle-live': S.settings.live = !S.settings.live; save(); renderTop(); break;
     case 'submit': if (p && ui.selected[p.id] != null) { ui.keepScroll = false; submitDecision(p, ui.selected[p.id]); window.scrollTo(0, 0); } break;
@@ -1256,7 +1456,7 @@ document.addEventListener('change', e => {
   else if (t.matches('[data-change="sort"]')) { ui.sort = t.value; render(); }
   else if (t.matches('[data-change="spec"]')) { ui.lib.spec = t.value; render(); }
   else if (t.matches('[data-change="diff"]')) { ui.lib.diff = t.value; render(); }
-  else if (t.matches('[data-setting]')) { S.settings[t.getAttribute('data-setting')] = t.checked; save(); renderTop(); syncSound(); }
+  else if (t.matches('[data-setting]')) { const k = t.getAttribute('data-setting'); S.settings[k] = t.checked; if (k === 'busy' && t.checked) { S.nextEventAt = S.clock + 45; S.nextArrival = Math.min(S.nextArrival || 0, S.clock + 30); } save(); renderTop(); syncSound(); if (k === 'glossary') { ui.keepScroll = true; render(); } }
   else if (t.matches('[data-tempunit]')) { S.settings.tempUnit = t.value; save(); ui.keepScroll = true; render(); }
   else if (t.matches('[data-volume]')) { S.settings.volume = +t.value; save(); syncSound(); }
   else if (t.id === 'import-file' && t.files[0]) {
@@ -1307,7 +1507,8 @@ S = load();
 if (!S) { bootFresh = true; newState(); }
 function normalize() {
   S.edu = S.edu || { completed: {} };
-  S.settings = Object.assign({ soundOn: true, ambient: true, monitor: true, sound: true, volume: 0.7 }, S.settings);
+  S.settings = Object.assign({ soundOn: true, ambient: true, monitor: true, sound: true, volume: 0.7, glossary: true, busy: false }, S.settings);
+  S.events = S.events || {};
   S.patients.forEach(p => { p.exam = p.exam || {}; });
   S.history = S.history || []; S.shiftNo = S.shiftNo || 1;
   S.patients.forEach(p => { if (!p.mrn) p.mrn = newMrn(); });
