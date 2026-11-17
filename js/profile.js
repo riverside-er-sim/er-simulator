@@ -17,7 +17,7 @@ const ICONS = [['steth', 'Stethoscope'], ['Cardiology', 'Heart'], ['Neurology', 
 
 function xp(S) {
   const c = S.career || {}, quiz = Object.values((S.edu || {}).completed || {}).reduce((a, b) => a + b, 0);
-  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5 + (c.dxBonus || 0) + (c.cprSaves || 0) * 20 + (c.cprPractice ? 10 : 0) + (c.dailyDone || 0) * 20;
+  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5 + (c.dxBonus || 0) + (c.cprSaves || 0) * 20 + (c.cprPractice ? 10 : 0) + (c.dailyDone || 0) * 20 + (window.LAB ? LAB.passedCount(S) * 15 : 0) + (c.skillCase || 0) * 5 + (c.orOps || 0) * 30;
 }
 function rank(S) {
   const x = xp(S); let i = 0;
@@ -47,6 +47,9 @@ function achievements(S) {
     { id: 'detective', name: 'Medical Detective', desc: 'Guess 5 final diagnoses correctly.', got: (c.dxOk || 0) >= 5, icon: 'eye' },
     { id: 'cpr', name: 'Heart Restarter', desc: 'Bring a patient back with good CPR.', got: (c.cprSaves || 0) >= 1, icon: 'Cardiology' },
     { id: 'cprpro', name: 'Steady Hands', desc: 'Score 90% or more in CPR Practice.', got: (c.cprBest || 0) >= 90, icon: 'check' },
+    { id: 'lab', name: 'Skills Lab Graduate', desc: 'Pass all six Skills Lab skills.', got: !!window.LAB && LAB.passedCount(S) >= LAB.SKILLS.length, icon: 'check' },
+    { id: 'scrub', name: 'Scrubbed In', desc: 'Complete an operation in the Operating Room.', got: (c.orOps || 0) >= 1, icon: 'Trauma' },
+    { id: 'orstar', name: 'Safety Star', desc: 'Score 90% or more in the Operating Room.', got: (c.orBest || 0) >= 90, icon: 'Emergency Medicine' },
     { id: 'daily', name: 'Daily Doctor', desc: 'Finish the Case of the Day 3 days in a row.', got: (c.bestDailyStreak || 0) >= 3, icon: 'clock' },
     { id: 'chief', name: 'Chief of the ER', desc: 'Reach the highest rank.', got: rank(S).level === RANKS.length, icon: 'Pediatrics' }
   ];
@@ -92,7 +95,9 @@ function view(ui, S, icon) {
     st('Conversations', (c.talkOk || 0) + '/' + (c.talks || 0), 'handled well') +
     st('Useful Tests', c.goodTests || 0, (c.extraTests || 0) + ' not needed') +
     st('Diagnoses', (c.dxOk || 0) + '/' + (c.dxTotal || 0), 'guessed correctly') +
-    st('CPR', (c.cprSaves || 0) + ' saved', 'best practice score ' + (c.cprBest || 0) + '%') + '</div>';
+    st('CPR', (c.cprSaves || 0) + ' saved', 'best practice score ' + (c.cprBest || 0) + '%') +
+    st('Skills Lab', (window.LAB ? LAB.passedCount(S) : 0) + '/6', 'skills passed') +
+    st('Operations', c.orOps || 0, (c.orOps ? 'best safety score ' + (c.orBest || 0) + '%' : 'scrub in at ' + 'Junior Resident')) + '</div>';
   h += '<div class="panel"><div class="panel-title">' + icon('check', 18) + 'Achievements<span class="exam-count">' + got + ' of ' + ach.length + ' Unlocked</span></div><div class="ach-grid">' +
     ach.map(a => '<div class="ach' + (a.got ? ' got' : '') + '">' + (window.ART ? '<div class="ach-medal">' + ART.medal(a.id, a.got, 54) + '<span>' + icon(a.icon, 18) + '</span></div>' : '<div class="ach-ic">' + icon(a.icon, 22) + '</div>') + '<div><b>' + esc(a.name) + '</b><div class="small">' + esc(a.desc) + '</div></div></div>').join('') + '</div></div></div></div>';
   return h;

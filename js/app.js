@@ -893,10 +893,56 @@ function finishCpr(pid, res) {
   save(); render(); window.scrollTo(0, 0);
 }
 
+/* ───────── Operating Room and hands-on skills ───────── */
+const OR_LEVEL = 3;
+function orCfg(p) { return window.OR ? OR.CFG[p.caseId] : null; }
+function orDue(p) { const cfg = orCfg(p); return !!cfg && !p.orDone && !isClosed(p) && !p.rescueActive && !p.arrest && p.decisionIndex === cfg.after + 1; }
+function orUnlocked() { return !careerOn() || rankLevel() >= OR_LEVEL; }
+function orPanel(p) {
+  const cfg = orCfg(p), ok = orUnlocked();
+  return '<div class="dec"><div class="dec-step">Surgery</div><h2>Ready for the Operating Room</h2>' + OR.scene(p) +
+    '<div class="findings"><b>Planned operation:</b> ' + esc(cfg.proc) + '.</div>' +
+    (ok ? '<p>Scrub in and lead the team\'s safety work: talking with the patient, the safety time-out, the sterile tray, watching the monitor, the instrument count and recovery. The surgeon does the operation.</p>'
+      : '<p class="small muted">🔒 Scrubbing in to the Operating Room unlocks at <b>' + esc(rankName(OR_LEVEL)) + '</b>. Until then, the surgical team takes care of it.</p>') +
+    '<div class="submit-row"><button class="btn" data-act="or-skip" data-id="' + p.id + '">Let the Surgical Team Operate</button>' + (ok ? '<button class="btn btn-primary btn-lg" data-act="or-open" data-id="' + p.id + '">🩺 Scrub In</button>' : '') + '</div></div>';
+}
+function finishOr(pid, res) {
+  const p = S.patients.find(x => x.id === pid);
+  if (!p || !res || res.quit) { render(); return; }
+  const cfg = orCfg(p);
+  p.orDone = { by: 'you', score: res.score };
+  S.career.orOps = (S.career.orOps || 0) + 1; S.career.orBest = Math.max(S.career.orBest || 0, res.score);
+  rec(p, 'intervention', 'Operating room: ' + cfg.proc + '. You led the safety checks (safety score ' + res.score + '%): consent, time-out, sterile tray, monitoring, instrument count and recovery.');
+  addUpdate(p, 'Operation finished: ' + cfg.proc + '. Back from the recovery room.', 'info');
+  if (res.pass) { p.severity = clamp(p.severity - 4, 0, cap(caseOf(p))); updateStatus(p); }
+  save(); render(); window.scrollTo(0, 0);
+}
+function skipOr(p) {
+  const cfg = orCfg(p);
+  p.orDone = { by: 'team' };
+  addUpdate(p, 'The surgical team performed the operation: ' + cfg.proc + '. Back from the recovery room.', 'info');
+}
+function recordSkill(res) {
+  if (!res || res.quit || res.score == null) return;
+  S.career.skills = S.career.skills || {};
+  S.career.skills[res.id] = Math.max(S.career.skills[res.id] || 0, res.score);
+}
+function caseSkill(p) { const id = window.LAB && LAB.CASE_SKILLS[p.caseId]; return id && !isClosed(p) && p.skillDone == null ? id : null; }
+function finishCaseSkill(pid, res) {
+  recordSkill(res);
+  const p = S.patients.find(x => x.id === pid);
+  if (p && res && !res.quit && res.pass) {
+    const sk = LAB.SKILLS.find(s => s.id === res.id);
+    p.skillDone = res.score; S.career.skillCase = (S.career.skillCase || 0) + 1;
+    rec(p, 'intervention', 'Hands-on skill: ' + sk.name + ' (' + res.score + '% right on the first try).');
+  }
+  save(); render();
+}
+
 /* ───────── Career mode: unlock cases and hospital areas by rank ───────── */
 const DIFF_UNLOCK = { Beginner: 1, Intermediate: 2, Advanced: 4, Expert: 5 };
 const AREA_UNLOCK = { Pediatrics: [2, 'Pediatric ER'], Trauma: [3, 'Trauma Bay'] };
-window.CAREER_UNLOCKS = { 1: ['Beginner cases', 'Main ER & Fast Track'], 2: ['Intermediate cases', 'Pediatric ER'], 3: ['Trauma Bay'], 4: ['Advanced cases'], 5: ['Expert cases'], 6: ['Teaching junior doctors (bragging rights)'], 7: ['Running the whole ER'] };
+window.CAREER_UNLOCKS = { 1: ['Beginner cases', 'Main ER & Fast Track', 'Skills Lab'], 2: ['Intermediate cases', 'Pediatric ER'], 3: ['Trauma Bay', 'Operating Room'], 4: ['Advanced cases'], 5: ['Expert cases'], 6: ['Teaching junior doctors (bragging rights)'], 7: ['Running the whole ER'] };
 function rankLevel() { return window.PROFILE ? PROFILE.rank(S).level : 7; }
 function careerOn() { return S.settings.career !== false; }
 function unlockLevel(c) { return Math.max(DIFF_UNLOCK[c.difficulty] || 1, (AREA_UNLOCK[c.specialty] || [1])[0]); }
@@ -1069,6 +1115,7 @@ function dischargeEval(p) {
     { label: 'Vital signs acceptable', pass: !!v && v.spo2 >= 93 && v.sbp >= (p.age < 12 ? 80 : 90) && v.hr <= (p.age < 12 ? 140 : 110) && v.temp < 38.3, detail: v ? vitalsText(v) : '' },
     { label: 'Stability status is Stable or Improving', pass: p.status === 'Stable' || p.status === 'Improving', detail: 'Current status: ' + p.status + '.' },
     examCheck(p),
+    { label: 'Operation completed', pass: !orDue(p), detail: 'This patient still needs their operation. Go to the Operating Room panel.' },
     { label: 'Conversation with the patient or family completed', pass: !extrasOf(p).talk || !!p.talkDone, detail: 'There is still an important conversation to have with this patient or their family.' },
     { label: 'Observed for at least 15 minutes after the last treatment', pass: observed >= 15, detail: observed >= 15 ? '' : 'Only ' + Math.max(0, observed) + ' minutes since the last intervention. Use "Observe 15 min" before discharge.' }
   ];
@@ -1144,6 +1191,7 @@ function render() {
   else if (r.name === 'profile') html = window.PROFILE ? window.PROFILE.view(ui, S, icon) : '';
   else if (r.name === 'history') html = viewHistory();
   else if (r.name === 'leaderboard') html = viewLeaderboard();
+  else if (r.name === 'skills') html = window.LAB ? LAB.view(S) : '';
   else if (r.name === 'past') html = viewPastRecord(r.shift, r.pid);
   else html = viewDash();
   document.getElementById('app').innerHTML = convTemps(html);
@@ -1159,7 +1207,7 @@ function render() {
 function renderTop() {
   const unread = S.alerts.filter(a => !a.read).length;
   const r = ui.route.name;
-  const nav = [['dash', 'Waiting Room', '#/'], ['library', 'Add Patient / Cases', '#/library'], ['learn', 'Education', '#/learn'], ['report', 'Shift Report', '#/report'], ['history', 'Past Shifts', '#/history'], ['leaderboard', 'Leaderboard', '#/leaderboard'], ['profile', 'My Profile', '#/profile']];
+  const nav = [['dash', 'Waiting Room', '#/'], ['library', 'Add Patient / Cases', '#/library'], ['learn', 'Education', '#/learn'], ['skills', 'Skills Lab', '#/skills'], ['report', 'Shift Report', '#/report'], ['history', 'Past Shifts', '#/history'], ['leaderboard', 'Leaderboard', '#/leaderboard'], ['profile', 'My Profile', '#/profile']];
   let h = '<div class="tb">' +
     '<button class="brand" data-go="#/"><span class="brand-logo" style="color:var(--crit)">' + icon('Emergency Medicine', 22) + '</span><span>Riverside ER<small>Simulation · Fictional</small></span></button>' +
     '<nav class="tb-nav">' + nav.map(n => '<button class="' + ((r === n[0] || (n[0] === 'dash' && (r === 'room' || r === 'record')) || (n[0] === 'history' && r === 'past')) ? 'on' : '') + '" data-go="' + n[2] + '">' + n[1] + '</button>').join('') + '</nav>' +
@@ -1289,6 +1337,7 @@ function viewRoom(id) {
     '<section class="a-upd panel"><div class="panel-title">' + icon('clock', 18) + 'Clinical updates</div><ul class="tl">' +
       p.updates.map(u => '<li class="k-' + u.kind + '"><div class="t">' + fmtDay(u.t) + ' ' + fmtClock(u.t) + '</div>' + esc(u.text) + '</li>').join('') + '</ul></section>' +
     '<section class="a-act panel"><div class="panel-title">' + icon('steth', 18) + 'Bedside actions</div><div class="row">' +
+      (caseSkill(p) ? '<button class="btn btn-skill" data-act="lab-case" data-id="' + p.id + '">🧤 Hands-On: ' + esc(LAB.SKILLS.find(s => s.id === caseSkill(p)).name) + '</button>' : '') +
       (isClosed(p) ? '' : '<button class="btn" data-act="reassess" data-id="' + p.id + '">' + icon('steth', 18) + 'Reassess Vitals (+5 Min)</button><button class="btn" data-act="observe" data-id="' + p.id + '">' + icon('hourglass', 18) + 'Observe 15 Min</button>') +
       '<button class="btn" data-record="' + p.id + '">' + icon('list', 18) + 'Full Medical Record</button>' +
       '<button class="btn" data-act="reset" data-id="' + p.id + '">' + icon('refresh', 18) + 'Restart This Case</button></div>' +
@@ -1415,6 +1464,7 @@ function decisionPanel(p) {
   if (p.talkFb) return talkFbView(p);
   if (p.feedback) return feedbackView(p);
   if (talkDue(p)) return talkPanel(p);
+  if (orDue(p)) return orPanel(p);
   const d = currentDecision(p);
   if (!d) {
     return '<div class="dec"><div class="dec-step">All decisions complete</div><h2>Final Evaluation</h2><div class="findings">You have completed every clinical decision for this case. Before discharge, the patient must be observed, reach a safe level of stability, and pass the discharge-readiness evaluation.</div>' +
@@ -1662,6 +1712,7 @@ function route(hh) {
   else if (h.indexOf('#/profile') === 0) ui.route = { name: 'profile' };
   else if (h.indexOf('#/history') === 0) ui.route = { name: 'history' };
   else if (h.indexOf('#/leaderboard') === 0) ui.route = { name: 'leaderboard' };
+  else if (h.indexOf('#/skills') === 0) ui.route = { name: 'skills' };
   else if (/^#\/past\/[^/]+\/.+$/.test(h)) { const m2 = h.split('/'); ui.route = { name: 'past', shift: m2[2], pid: m2[3] }; }
   else if (h.indexOf('#/learn') === 0) { ui.route = { name: 'learn' }; const t = h.split('/')[2]; if (t) ui.eduTopic = t; }
   else ui.route = { name: 'dash' };
@@ -1713,6 +1764,10 @@ document.addEventListener('click', e => {
     case 'dx-submit': if (p && ui.dxSel && ui.dxSel[p.id] != null) { const ch = dxOptions(p)[ui.dxSel[p.id]]; p.dx = { choice: ch, ok: ch === caseOf(p).finalDiagnosis, at: p.decisionIndex }; rec(p, 'decision', 'Working diagnosis chosen: ' + ch); ui.modal = null; save(); ui.keepScroll = true; render(); } break;
     case 'cpr-start': if (p && window.CPR) { const pid = p.id; CPR.open({ title: 'Patient ' + p.num + ' · ' + p.bed, attempts: 2, onDone: res => finishCpr(pid, res) }); } break;
     case 'cpr-practice': if (window.CPR) CPR.open({ title: 'Training Mannequin', practice: true, onDone: res => { if (res && res.score != null) { S.career.cprBest = Math.max(S.career.cprBest || 0, res.score); S.career.cprPractice = (S.career.cprPractice || 0) + 1; save(); render(); } } }); break;
+    case 'lab-open': if (window.LAB) LAB.open(t.getAttribute('data-skill'), { onDone: res => { recordSkill(res); save(); ui.keepScroll = true; render(); } }); break;
+    case 'lab-case': if (p && window.LAB && caseSkill(p)) { const pid = p.id; LAB.open(caseSkill(p), { caseTitle: 'Patient ' + p.num + ' · ' + p.bed, onDone: res => finishCaseSkill(pid, res) }); } break;
+    case 'or-open': if (p && window.OR && orDue(p) && orUnlocked()) { const pid = p.id; OR.open({ p: p, allergies: (caseOf(p).history || {}).allergies, onDone: res => finishOr(pid, res) }); } break;
+    case 'or-skip': if (p && orDue(p)) { skipOr(p); save(); render(); window.scrollTo(0, 0); } break;
     case 'toggle-sound': S.settings.soundOn = S.settings.soundOn === false; if (window.SND) SND.unlock(); save(); renderTop(); syncSound(); break;
     case 'toggle-live': S.settings.live = !S.settings.live; save(); renderTop(); break;
     case 'submit': if (p && ui.selected[p.id] != null) { ui.keepScroll = false; submitDecision(p, ui.selected[p.id]); window.scrollTo(0, 0); } break;
@@ -1791,7 +1846,7 @@ document.addEventListener('pointerdown', e => { if (e.target.closest && e.target
 
 /* Live clock */
 setInterval(() => {
-  if (!S.settings.live || ui.modal || document.hidden || (window.CPR && CPR.active)) return;
+  if (!S.settings.live || ui.modal || document.hidden || (window.CPR && CPR.active) || (window.LAB && LAB.active) || (window.OR && OR.active)) return;
   advanceTime(5); save(); ui.keepScroll = true; render();
 }, 20000);
 
