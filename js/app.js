@@ -287,6 +287,18 @@ function createPatient(caseId, seed) {
   return p;
 }
 function newMrn() { return 'MRN-' + Math.floor(100000 + Math.random() * 899999); }
+/* Temperature units: data stays in °C; display converts when the player picks °F. */
+function useF() { return !!(S && S.settings && S.settings.tempUnit === 'F'); }
+function cToF(c) { return Math.round((c * 9 / 5 + 32) * 10) / 10; }
+function fmtTemp(c) { return (useF() ? cToF(c) : +c).toFixed(1); }
+function tUnit() { return useF() ? '°F' : '°C'; }
+function convTemps(html) {
+  if (!useF()) return html;
+  const conv = n => { n = +n; return n < 25 ? Math.round(n * 1.8 * 10) / 10 : cToF(n); }; // small numbers are temperature changes, not temperatures
+  return html
+    .replace(/(\d+(?:\.\d+)?)\s?[–-]\s?(\d+(?:\.\d+)?)\s?°\s?C\b/g, (m, a, b) => conv(a) + '–' + conv(b) + ' °F')
+    .replace(/(\d+(?:\.\d+)?)(\s?)°\s?C\b/g, (m, a, sp) => conv(a) + sp + '°F');
+}
 function vitalsText(v) { if (!v) return '—'; return 'HR ' + v.hr + ', BP ' + v.sbp + '/' + v.dbp + ', RR ' + v.rr + ', SpO₂ ' + v.spo2 + '%, Temp ' + v.temp.toFixed(1) + '°C'; }
 
 function newState() {
@@ -313,7 +325,7 @@ function changeText(p) {
   if (Math.abs(b.sbp - a.sbp) >= 5) parts.push('BP ' + a.sbp + '/' + a.dbp + '→' + b.sbp + '/' + b.dbp);
   if (Math.abs(b.spo2 - a.spo2) >= 2) parts.push('SpO₂ ' + a.spo2 + '→' + b.spo2 + '%');
   if (Math.abs(b.rr - a.rr) >= 3) parts.push('RR ' + a.rr + '→' + b.rr);
-  if (Math.abs(b.temp - a.temp) >= 0.5) parts.push('Temp ' + a.temp + '→' + b.temp + '°C');
+  if (Math.abs(b.temp - a.temp) >= 0.5) parts.push('Temp ' + a.temp + '°C→' + b.temp + '°C');
   return parts.length ? ' Changes: ' + parts.join(', ') + '.' : '';
 }
 function updateStatus(p) {
@@ -608,7 +620,7 @@ function render() {
   else if (r.name === 'history') html = viewHistory();
   else if (r.name === 'past') html = viewPastRecord(r.shift, r.pid);
   else html = viewDash();
-  document.getElementById('app').innerHTML = html;
+  document.getElementById('app').innerHTML = convTemps(html);
   renderModal();
   if (ui.keepScroll) window.scrollTo(0, y);
   ui.keepScroll = false;
@@ -661,12 +673,12 @@ function mainDropdown() {
 function renderToasts() {
   const inRoom = ui.route.name === 'room' ? ui.route.id : null;
   const list = S.alerts.filter(a => !a.read && a.pid !== inRoom).slice(0, window.innerWidth < 700 ? 1 : 3);
-  document.getElementById('toasts').innerHTML = list.map(a => {
+  document.getElementById('toasts').innerHTML = convTemps(list.map(a => {
     const em = ['Critical', 'Unstable', 'Deceased'].indexOf(a.status) >= 0 || a.kind === 'EMERGENCY';
     return '<div class="toast ' + statusClass(a.status) + '" role="alert"><div class="toast-h">' + icon('bell', 16) + (em ? 'EMERGENCY ALERT' : 'ALERT') + ' · PATIENT ' + a.num + '<span style="margin-left:auto" class="mono">' + fmtClock(a.t) + '</span></div>' +
       '<div class="toast-b"><b>' + esc(a.kind) + '</b> — ' + esc(a.text) + '<div class="small muted" style="margin-top:4px">Current Severity: <b>' + esc(a.status) + '</b></div></div>' +
       '<div class="toast-f">' + (a.status !== 'Deceased' ? '<button class="btn btn-sm btn-danger" data-room="' + a.pid + '">Enter Patient ' + a.num + '\'s Room</button>' : '<button class="btn btn-sm" data-record="' + a.pid + '">View Record</button>') + '<button class="btn btn-sm" data-dismiss="' + a.id + '">Dismiss</button></div></div>';
-  }).join('');
+  }).join(''));
 }
 
 /* ───────── Dashboard ───────── */
@@ -709,7 +721,7 @@ function card(p) {
     '<div class="pc-body"><div class="pc-top"><span class="pnum">PATIENT ' + p.num + (p.returning ? ' <span class="ret" title="Returning patient">↩ Return</span>' : '') + '</span><span class="badge ' + statusClass(p.status) + '">' + p.status + '</span></div>' +
     '<div class="pmeta">Age ' + p.age + ' · ' + (p.sex === 'F' ? 'Female' : 'Male') + ' · ' + esc(p.bed) + ' · ' + (isClosed(p) ? 'Under care ' + fmtDur(p.outcomeTime - p.arrival) : 'In ED ' + fmtDur(S.clock - p.arrival)) + '</div>' +
     '<div class="pcond"><span class="ic">' + icon(c.specialty, 20) + '</span><div><b>' + esc(c.suspected) + '</b><span>' + esc(tc(c.chiefComplaint)) + '</span><div class="row" style="margin-top:4px;gap:6px"><span class="diff diff-' + c.difficulty + '">' + c.difficulty + '</span><span class="spec">' + c.specialty + '</span></div></div></div>' +
-    (v ? '<div class="vgrid">' + vc('HR', 'hr', v.hr) + vc('BP', 'sbp', v.sbp + '/' + v.dbp) + vc('SpO₂', 'spo2', v.spo2 + '%') + vc('RR', 'rr', v.rr) + vc('TEMP', 'temp', v.temp.toFixed(1)) + '</div>' : '') +
+    (v ? '<div class="vgrid">' + vc('HR', 'hr', v.hr) + vc('BP', 'sbp', v.sbp + '/' + v.dbp) + vc('SpO₂', 'spo2', v.spo2 + '%') + vc('RR', 'rr', v.rr) + vc('TEMP', 'temp', fmtTemp(v.temp)) + '</div>' : '') +
     '<div class="prog">Treatment Progress: ' + doneN + ' of ' + total + ' Decisions<div class="bar"><i style="width:' + Math.round(100 * doneN / total) + '%"></i></div></div>' +
     wait + '</div>' +
     '<div class="pc-foot">' + (isClosed(p) ? '<div class="row" style="gap:8px"><button class="btn" style="flex:1" data-record="' + p.id + '">' + icon('list', 18) + 'VIEW RECORD</button>' + (canReturn(p) ? '<button class="btn" data-act="return-cur" data-id="' + p.id + '" title="Bring this patient back with a new problem">↩ Return Visit</button>' : '') + '</div>' : '<button class="btn btn-primary" data-room="' + p.id + '">ENTER TREATMENT ROOM</button>') + '</div></article>';
@@ -765,7 +777,7 @@ function monitor(p) {
       '<div class="mv bp' + al('sbp') + '"><div class="l">NIBP</div><div class="n">' + v.sbp + '/' + v.dbp + '</div><div class="u">mmHg</div></div>' +
       '<div class="mv sp' + al('spo2') + '"><div class="l">SpO₂</div><div class="n">' + v.spo2 + '</div><div class="u">%</div></div>' +
       '<div class="mv rr' + al('rr') + '"><div class="l">RESP</div><div class="n">' + v.rr + '</div><div class="u">breaths/min</div></div>' +
-      '<div class="mv tp' + al('temp') + '"><div class="l">TEMP</div><div class="n">' + v.temp.toFixed(1) + '</div><div class="u">°C</div></div>' +
+      '<div class="mv tp' + al('temp') + '"><div class="l">TEMP</div><div class="n">' + fmtTemp(v.temp) + '</div><div class="u">' + tUnit() + '</div></div>' +
       '<div class="mv tp"><div class="l">TREND</div><div class="n" style="font-size:20px;padding-top:6px">' + (trendRate(p) < -0.05 ? '▼ Better' : trendRate(p) > 0.05 ? '▲ Worse' : '■ Steady') + '</div><div class="u">next 10 min</div></div>' +
     '</div><div class="sevmeter"><div class="lab"><span>SEVERITY INDEX ' + sev + '/100</span><span>lower is better</span></div><div class="sevtrack"><i style="left:calc(' + clamp(sev, 0, 100) + '% - 2px)"></i></div></div></div>';
 }
@@ -868,7 +880,7 @@ function feedbackView(p) {
   if (!f.correct) h += '<div class="explain" style="border-color:var(--stab)"><h4>The Best Answer Was</h4><b>' + esc(f.correctText) + '</b><div style="margin-top:6px">' + esc(f.correctFeedback) + '</div></div>';
   h += '<div class="explain"><h4>What Happened Next · ' + f.minutes + ' Simulated Minutes Passed</h4>' +
     '<div class="row" style="margin-bottom:8px"><span class="badge ' + statusClass(f.stBefore) + '">' + f.stBefore + '</span> → <span class="badge ' + statusClass(f.stAfter) + '">' + f.stAfter + '</span><span class="small muted">Severity ' + f.sevBefore + ' → ' + f.sevAfter + '</span></div>' +
-    (vb && va ? '<div class="chg">' + chg('HR', vb.hr, va.hr) + chg('BP', vb.sbp + '/' + vb.dbp, va.sbp + '/' + va.dbp) + chg('SpO₂', vb.spo2, va.spo2, '%') + chg('RR', vb.rr, va.rr) + chg('T', vb.temp, va.temp, '°') + '</div>' : '') +
+    (vb && va ? '<div class="chg">' + chg('HR', vb.hr, va.hr) + chg('BP', vb.sbp + '/' + vb.dbp, va.sbp + '/' + va.dbp) + chg('SpO₂', vb.spo2, va.spo2, '%') + chg('RR', vb.rr, va.rr) + chg('T', fmtTemp(vb.temp), fmtTemp(va.temp), useF() ? ' °F' : ' °C ') + '</div>' : '') +
     (f.results && f.results.update && (f.correct || !f.rescue) ? '<p style="margin:10px 0 0">' + esc(f.results.update) + '</p>' : '') +
     ((f.results && ((f.results.labs || []).length || (f.results.imaging || []).length)) ? '<p class="small muted" style="margin:6px 0 0">New results have been added to the Laboratory and Imaging panels.</p>' : '') + '</div>';
   const next = p.outcome === 'deceased' ? 'View Outcome' : (currentDecision(p) ? (p.rescueActive ? 'Go to EMERGENCY Decision' : 'Continue to Next Decision') : 'Continue');
@@ -1044,6 +1056,7 @@ function renderModal() {
     inner = '<div class="modal-h"><h2>Simulation Settings</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' +
       sw('live', 'Live Clock', 'When on, 5 simulated minutes pass every 20 real seconds. When off, time only moves when you act.') +
       sw('arrivals', 'Ambulance Arrivals', 'A new patient arrives every ' + S.settings.arrivalEvery + ' simulated minutes (up to 8 active patients).') +
+      '<div class="switch"><div><b>Temperature Units</b><small>Show body temperatures in Celsius or Fahrenheit everywhere in the simulator.</small></div><select id="set-temp" data-tempunit><option value="C"' + (useF() ? '' : ' selected') + '>Celsius</option><option value="F"' + (useF() ? ' selected' : '') + '>Fahrenheit</option></select></div>' +
       sw('soundOn', 'Hospital Sounds', 'Master switch for every sound in the simulator.') +
       sw('ambient', 'Ambient Hospital Noise', 'Ventilation hum, overhead paging chimes, distant monitors and trolleys.') +
       sw('monitor', 'Bedside Monitor Beeps', 'A beep for every heartbeat in the treatment room. The pitch drops when oxygen levels fall.') +
@@ -1051,7 +1064,7 @@ function renderModal() {
       '<div class="switch"><div><b>Volume</b></div><input type="range" min="0" max="1" step="0.05" value="' + (S.settings.volume == null ? 0.7 : S.settings.volume) + '" data-volume style="width:160px"></div>' +
       '<p class="small muted">Progress saves automatically in this browser after every action. Use Export in the menu for a backup file.</p></div><div class="modal-f"><button class="btn btn-primary" data-act="close">Done</button></div>';
   }
-  root.innerHTML = '<div class="modal-bg" data-act="close-bg"><div class="modal" role="dialog" aria-modal="true">' + inner + '</div></div>';
+  root.innerHTML = convTemps('<div class="modal-bg" data-act="close-bg"><div class="modal" role="dialog" aria-modal="true">' + inner + '</div></div>');
 }
 
 /* ───────── Routing ───────── */
@@ -1132,6 +1145,7 @@ document.addEventListener('change', e => {
   else if (t.matches('[data-change="spec"]')) { ui.lib.spec = t.value; render(); }
   else if (t.matches('[data-change="diff"]')) { ui.lib.diff = t.value; render(); }
   else if (t.matches('[data-setting]')) { S.settings[t.getAttribute('data-setting')] = t.checked; save(); renderTop(); syncSound(); }
+  else if (t.matches('[data-tempunit]')) { S.settings.tempUnit = t.value; save(); ui.keepScroll = true; render(); }
   else if (t.matches('[data-volume]')) { S.settings.volume = +t.value; save(); syncSound(); }
   else if (t.id === 'import-file' && t.files[0]) {
     const r = new FileReader();
