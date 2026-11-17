@@ -3,8 +3,7 @@
    The surgery itself is a non-graphic cartoon; no technique, no medicine doses. */
 (function () {
 'use strict';
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+const { esc, shuffle } = window.UTIL;
 const F = 'font-family="Inter,sans-serif"';
 const PASS = 70;
 const STAGES = ['Before Surgery', 'Time-Out', 'Sterile Tray', 'Operation', 'The Count', 'Recovery'];
@@ -241,7 +240,11 @@ function close() {
   if (st.root) st.root.remove();
   st = null;
 }
-function onKey(e) { if (st && e.key === 'Escape') { e.preventDefault(); quit(); } }
+function onKey(e) {
+  if (!st) return;
+  if (e.key === 'Escape') { e.preventDefault(); quit(); return; }
+  if ((e.key === 'Enter' || e.key === ' ') && e.target.closest && e.target.closest('[data-or="tap"]')) { e.preventDefault(); onClick(e); }
+}
 function quit() { const cb = st.opts.onDone; close(); if (cb) cb({ quit: true }); }
 
 /* Quiz helper: st.q = { def, order, picked, ok, tried } */

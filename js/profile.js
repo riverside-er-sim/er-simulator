@@ -1,7 +1,7 @@
 /* Doctor profile: ID badge, rank progression (XP), career stats, achievements. */
 (function () {
 'use strict';
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const esc = window.UTIL.esc;
 const RANKS = [
   { xp: 0, name: 'Medical Student' },
   { xp: 150, name: 'Intern' },
@@ -17,7 +17,7 @@ const ICONS = [['steth', 'Stethoscope'], ['Cardiology', 'Heart'], ['Neurology', 
 
 function xp(S) {
   const c = S.career || {}, quiz = Object.values((S.edu || {}).completed || {}).reduce((a, b) => a + b, 0);
-  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5 + (c.dxBonus || 0) + (c.cprSaves || 0) * 20 + (c.cprPractice ? 10 : 0) + (c.dailyDone || 0) * 20 + (window.LAB ? LAB.passedCount(S) * 15 : 0) + (c.skillCase || 0) * 5 + (c.orOps || 0) * 30;
+  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5 + (c.dxBonus || 0) + (c.cprSaves || 0) * 20 + (c.cprPractice ? 10 : 0) + (c.dailyDone || 0) * 20 + (window.LAB ? LAB.passedCount(S) * 15 : 0) + (c.skillCase || 0) * 5 + Object.keys(c.orCases || {}).length * 30;
 }
 function rank(S) {
   const x = xp(S); let i = 0;

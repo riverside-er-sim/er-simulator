@@ -4,7 +4,7 @@
 'use strict';
 const LO = 100, HI = 120, OK_LO = 95, OK_HI = 125, PER_ROUND = 30, ROUNDS = 2, PASS = 60;
 let st = null;
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+const esc = window.UTIL.esc;
 
 function open(opts) {
   close();

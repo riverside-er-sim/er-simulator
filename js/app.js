@@ -912,6 +912,8 @@ function finishOr(pid, res) {
   const cfg = orCfg(p);
   p.orDone = { by: 'you', score: res.score };
   S.career.orOps = (S.career.orOps || 0) + 1; S.career.orBest = Math.max(S.career.orBest || 0, res.score);
+  // XP comes from each surgery case passed once, so replaying the same case can't farm XP.
+  if (res.pass) { S.career.orCases = S.career.orCases || {}; S.career.orCases[p.caseId] = Math.max(S.career.orCases[p.caseId] || 0, res.score); }
   rec(p, 'intervention', 'Operating room: ' + cfg.proc + '. You led the safety checks (safety score ' + res.score + '%): consent, time-out, sterile tray, monitoring, instrument count and recovery.');
   addUpdate(p, 'Operation finished: ' + cfg.proc + '. Back from the recovery room.', 'info');
   if (res.pass) { p.severity = clamp(p.severity - 4, 0, cap(caseOf(p))); updateStatus(p); }
@@ -927,7 +929,7 @@ function recordSkill(res) {
   S.career.skills = S.career.skills || {};
   S.career.skills[res.id] = Math.max(S.career.skills[res.id] || 0, res.score);
 }
-function caseSkill(p) { const id = window.LAB && LAB.CASE_SKILLS[p.caseId]; return id && !isClosed(p) && p.skillDone == null ? id : null; }
+function caseSkill(p) { const id = window.LAB && LAB.CASE_SKILLS[p.caseId]; return id && !isClosed(p) && !p.arrest && !p.rescueActive && !p.needsTriage && p.skillDone == null ? id : null; }
 function finishCaseSkill(pid, res) {
   recordSkill(res);
   const p = S.patients.find(x => x.id === pid);
@@ -1262,7 +1264,7 @@ function viewDash() {
   const active = S.patients.filter(p => !isClosed(p));
   const closed = S.patients.filter(isClosed);
   const sorted = active.slice().sort(ui.sort === 'number' ? (a, b) => a.num - b.num : (a, b) => (RANK[b.status] - RANK[a.status]) || (b.severity - a.severity));
-  const waitingN = active.filter(p => currentDecision(p) && !p.feedback).length;
+  const waitingN = active.filter(p => (currentDecision(p) && !p.feedback) || orDue(p)).length;
   const tot = S.stats.correct + S.stats.incorrect;
   const crit = active.filter(p => p.status === 'Critical' || p.status === 'Unstable').length;
   const mapView = !!window.ART && S.settings.dashView === 'map';
@@ -1286,7 +1288,7 @@ function viewDash() {
   if (mapView && sorted.length) {
     const ambA = S.alerts.find(a => /ambulance arrival|by ambulance/i.test(a.kind) && S.clock - a.t <= 20);
     const amb = ambA ? (ui.ambSeen === ambA.id ? 'park' : 'drive') : null; if (ambA) ui.ambSeen = ambA.id; // drive in once, then stay parked
-    h += '<div class="panel map-panel">' + ART.floorMap(sorted, { ctDown: eventActive('ctDown'), ambulance: amb, needs: p => !!(p.needsTriage || talkDue(p) || (currentDecision(p) && !p.feedback)) }) +
+    h += '<div class="panel map-panel">' + ART.floorMap(sorted, { ctDown: eventActive('ctDown'), ambulance: amb, needs: p => !!(p.needsTriage || talkDue(p) || orDue(p) || (currentDecision(p) && !p.feedback)) }) +
       '<div class="map-legend small"><span><i style="background:#c62828"></i>Critical</span><span><i style="background:#d9640a"></i>Unstable</span><span><i style="background:#a67c00"></i>Needs Assessment</span><span><i style="background:#0f7c8c"></i>Improving</span><span><i style="background:#2e7d32"></i>Stable</span><span><i style="background:#1d5fbf"></i>Waiting for you</span><b>Click a patient to enter their room.</b></div></div>';
   } else h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
   if (closed.length) h += '<h2 class="section-h">Completed cases</h2><div class="grid">' + closed.map(card).join('') + '</div>';
@@ -1304,6 +1306,7 @@ function card(p) {
   else if (p.feedback) wait = '<div class="waiting none">' + icon('eye', 16) + 'Review Result of Your Last Decision</div>';
   else if (p.needsTriage) wait = '<div class="waiting em"><span class="dot"></span>New Arrival — Needs Triage</div>';
   else if (talkDue(p)) wait = '<div class="waiting"><span class="dot"></span>Patient or Family Wants to Talk</div>';
+  else if (orDue(p)) wait = '<div class="waiting"><span class="dot"></span>Ready for the Operating Room</div>';
   else if (d) wait = '<div class="waiting"><span class="dot"></span>Decision ' + (p.decisionIndex + 1) + ' Waiting for the Doctor</div>';
   else wait = '<div class="waiting ok">' + icon('check', 16) + 'Decisions Complete — Evaluate for Discharge</div>';
   const vc = (lab, key, val) => '<div class="vcell' + (v && abnormal(key, v[key], p.age) ? ' ab' : '') + '"><div class="l">' + lab + '</div><div class="n">' + val + '</div></div>';

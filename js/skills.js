@@ -3,8 +3,7 @@
    no medicine doses and no instructions for invasive procedures. */
 (function () {
 'use strict';
-const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
-const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const t = a[i]; a[i] = a[j]; a[j] = t; } return a; };
+const { esc, shuffle } = window.UTIL;
 const PASS = 70;
 const F = 'font-family="Inter,sans-serif"';
 
@@ -60,7 +59,7 @@ function artSplint(st) {
   const k = st.allKeys, val = st.val == null ? 50 : st.val;
   const tight = k.wrap && st.pi === 1 ? val : k.wrap ? 50 : 0;
   const tooTight = st.pi === 1 && val > 70, loose = st.pi === 1 && val < 30;
-  const pale = tooTight || (st.pi === 3 && !st.quizOk);
+  const pale = tooTight || (st.pi === 3 && !st.phaseDone);
   const raised = k.raise;
   let s = '<rect x="0" y="0" width="240" height="150" fill="#f4f7fb"/><g transform="' + (raised ? 'rotate(-12 40 90)' : '') + '">';
   if (k.place) s += '<rect x="26" y="' + (loose ? 104 : 98) + '" width="170" height="10" rx="3" fill="#d7b98c" stroke="#a07c4f"/>';
@@ -123,7 +122,7 @@ function artOxygen(st) {
   let dev = ph.device || '', spo2 = ph.spo2 || 0;
   if (ph.type === 'order') { dev = k.place ? 'nrb' : ''; spo2 = k.watch ? 99 : 0; }
   if (st.phase === 'result') { dev = 'nrb'; spo2 = 99; }
-  if (ph.type === 'quiz' && !st.quizOk) dev = '';
+  if (ph.type === 'quiz' && !st.phaseDone) dev = '';
   let s = '<rect x="0" y="0" width="240" height="150" fill="#f4f7fb"/><rect x="50" y="104" width="140" height="46" rx="20" fill="#9fb6d6"/>' +
     '<circle cx="120" cy="66" r="40" fill="#e9c7ab" stroke="#a97c5f"/><path d="M80 60 Q84 24 120 24 Q158 24 160 60 Q146 40 120 42 Q94 42 80 60Z" fill="#6d4c41"/>' +
     '<path d="M102 60 h10 M128 60 h10" stroke="#333" stroke-width="2.5" stroke-linecap="round"/><path d="M118 64 Q114 76 120 78" stroke="#a97c5f" stroke-width="2" fill="none"/><path d="M110 88 Q120 92 130 88" stroke="#8c5a32" stroke-width="2" fill="none"/>';
@@ -325,7 +324,7 @@ function open(id, opts) {
   const g = SKILL_BY[id]; if (!g) return;
   const root = document.createElement('div'); root.id = 'lab-root'; root.className = 'cpr-bg'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true');
   document.body.appendChild(root);
-  st = { g: g, opts: opts || {}, root: root, phase: 'intro', pi: -1, done: 0, doneKeys: [], allKeys: {}, pool: [], miss: 0, pts: 0, max: 0, msg: '', msgKind: '', val: 50, holding: false, elapsed: 0, releases: 0, timer: null, quizOk: false, quizTried: false, picked: null, layers: 1, cleanHands: false };
+  st = { g: g, opts: opts || {}, root: root, phase: 'intro', pi: -1, done: 0, doneKeys: [], allKeys: {}, pool: [], miss: 0, pts: 0, max: 0, msg: '', msgKind: '', val: 50, holding: false, elapsed: 0, releases: 0, timer: null, phaseDone: false, quizTried: false, picked: null, layers: 1, cleanHands: false };
   draw();
   document.addEventListener('keydown', onKey, true);
   document.addEventListener('keyup', onKeyUp, true);
@@ -342,14 +341,15 @@ function close() {
   if (st.root) st.root.remove();
   st = null;
 }
-function finish(quit) { const cb = st.opts.onDone, r = quit ? { quit: true, id: st.g.id } : st.result; close(); if (cb) cb(r); }
+const better = (a, b) => !a ? b : !b ? a : (b.score >= a.score ? b : a);
+function finish(quit) { const prev = st.opts.prev, cb = st.opts.onDone, r = quit ? (prev || { quit: true, id: st.g.id }) : better(prev, st.result); close(); if (cb) cb(r); }
 function phase() { return st.g.phases[st.pi]; }
 function startPhase(i) {
   st.pi = i; stopTimer();
   if (i >= st.g.phases.length) return result();
   const ph = phase();
-  st.phase = ph.type; st.done = 0; st.doneKeys = []; st.miss = 0; st.msg = ''; st.msgKind = ''; st.quizOk = false; st.quizTried = false; st.picked = null;
-  st.elapsed = 0; st.releases = 0; st.holding = false; st.val = 50; st.sliderTried = false;
+  st.phase = ph.type; st.done = 0; st.doneKeys = []; st.miss = 0; st.msg = ''; st.msgKind = ''; st.phaseDone = false; st.quizTried = false; st.picked = null;
+  st.elapsed = 0; st.releases = 0; st.holding = false; st.val = Math.random() < 0.5 ? 10 : 90; st.sliderTried = false;
   if (ph.type === 'order') { st.pool = shuffle(ph.steps.map((s, j) => j)); st.max += ph.steps.length; }
   else { st.max += 1; }
   if (ph.type === 'quiz') st.order = shuffle(ph.opts.map((o, j) => j));
@@ -382,7 +382,7 @@ function onClick(e) {
   else if (a === 'quit') finish(true);
   else if (a === 'done') finish(false);
   else if (a === 'next') startPhase(st.pi + 1);
-  else if (a === 'retry') { const g = st.g.id, o = st.opts; close(); open(g, o); }
+  else if (a === 'retry') { const g = st.g.id, o = Object.assign({}, st.opts, { prev: better(st.opts.prev, st.result) }); close(); open(g, o); }
   else if (a === 'pick') pickStep(+b.getAttribute('data-i'));
   else if (a === 'opt') pickOpt(+b.getAttribute('data-i'));
   else if (a === 'slide-check') sliderCheck();
@@ -406,21 +406,21 @@ function pickStep(i) {
   draw();
 }
 function pickOpt(i) {
-  const ph = phase(); if (st.quizOk) return;
+  const ph = phase(); if (st.phaseDone) return;
   const o = ph.opts[i]; st.picked = i;
-  if (o.ok) { st.quizOk = true; if (!st.quizTried) st.pts++; if (ph.after === 'layers') st.layers = 2; st.msg = o.fb; st.msgKind = 'ok'; }
+  if (o.ok) { st.phaseDone = true; if (!st.quizTried) st.pts++; if (ph.after === 'layers') st.layers = 2; st.msg = o.fb; st.msgKind = 'ok'; }
   else { st.quizTried = true; st.msg = o.fb + ' Try again.'; st.msgKind = 'bad'; }
   draw();
 }
 function sliderCheck() {
   const ph = phase(), z = ph.zones.find(x => st.val < x.max);
-  if (z.ok) { if (!st.sliderTried) st.pts++; st.quizOk = true; st.msg = '✓ ' + z.fb; st.msgKind = 'ok'; }
+  if (z.ok) { if (!st.sliderTried) st.pts++; st.phaseDone = true; st.msg = '✓ ' + z.fb; st.msgKind = 'ok'; }
   else { st.sliderTried = true; st.msg = z.fb + ' Adjust and check again.'; st.msgKind = 'bad'; }
   draw();
 }
 
 function holdStart() {
-  if (st.holding || st.quizOk) return;
+  if (st.holding || st.phaseDone) return;
   st.holding = true; st.msg = ''; st.msgKind = '';
   let last = performance.now();
   stopTimer();
@@ -428,7 +428,7 @@ function holdStart() {
     if (!st || !st.holding) return;
     const now = performance.now(); st.elapsed += (now - last) / 1000; last = now;
     const ph = phase();
-    if (st.elapsed >= ph.secs) { st.elapsed = ph.secs; st.holding = false; stopTimer(); st.quizOk = true; if (!st.releases || !ph.reset) st.pts++; else st.pts += 0.5; st.msg = '✓ ' + ph.done; st.msgKind = 'ok'; if (window.SND && SND.click) SND.click(); draw(); return; }
+    if (st.elapsed >= ph.secs) { st.elapsed = ph.secs; st.holding = false; stopTimer(); st.phaseDone = true; if (!st.releases || !ph.reset) st.pts++; else st.pts += 0.5; st.msg = '✓ ' + ph.done; st.msgKind = 'ok'; if (window.SND && SND.click) SND.click(); draw(); return; }
     liveHold();
   }, 100);
   liveHold();
@@ -484,20 +484,21 @@ function draw() {
         (fin ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '');
     } else if (ph.type === 'quiz') {
       body += '<p class="lab-q">' + esc(ph.q) + '</p><div class="lab-opts">' + st.order.map(i => {
-        const op = ph.opts[i], cls = st.picked === i ? (op.ok ? ' ok' : ' bad') : (st.quizOk && op.ok ? ' ok' : '');
-        return '<button class="lab-opt' + cls + '" data-lab="opt" data-i="' + i + '"' + (st.quizOk ? ' disabled' : '') + '>' + esc(op.t) + '</button>';
-      }).join('') + '</div>' + msg + (st.quizOk ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '');
+        const op = ph.opts[i], cls = st.picked === i ? (op.ok ? ' ok' : ' bad') : (st.phaseDone && op.ok ? ' ok' : '');
+        return '<button class="lab-opt' + cls + '" data-lab="opt" data-i="' + i + '"' + (st.phaseDone ? ' disabled' : '') + '>' + esc(op.t) + '</button>';
+      }).join('') + '</div>' + msg + (st.phaseDone ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '');
     } else if (ph.type === 'hold') {
       body += '<p class="lab-prompt">' + esc(ph.prompt) + '</p><div class="lab-hold-bar"><div class="lab-hold-fill" style="width:' + (100 * st.elapsed / ph.secs) + '%"></div></div><div class="lab-hold-time mono">' + Math.floor(st.elapsed) + ' / ' + ph.secs + ' ' + ph.unit + '</div>' + msg +
-        (st.quizOk ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '<button class="lab-hold" data-lab="hold" style="--c:' + g.color + '">Hold to ' + esc(ph.label) + '</button><p class="small muted" style="text-align:center;margin:0">Press and hold (or hold the space bar).</p>');
+        (st.phaseDone ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '<button class="lab-hold" data-lab="hold" style="--c:' + g.color + '">Hold to ' + esc(ph.label) + '</button><p class="small muted" style="text-align:center;margin:0">Press and hold (or hold the space bar).</p>');
     } else if (ph.type === 'slider') {
-      body += '<p class="lab-prompt">' + esc(ph.prompt) + '</p><div class="lab-slide"><span>Loose</span><input type="range" class="lab-slider" min="0" max="100" value="' + st.val + '" aria-label="Wrap tightness"' + (st.quizOk ? ' disabled' : '') + '><span>Tight</span></div>' + msg +
-        (st.quizOk ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '<div class="cpr-actions"><button class="btn btn-primary" data-lab="slide-check">' + esc(ph.btn) + '</button></div>');
+      body += '<p class="lab-prompt">' + esc(ph.prompt) + '</p><div class="lab-slide"><span>Loose</span><input type="range" class="lab-slider" min="0" max="100" value="' + st.val + '" aria-label="Wrap tightness"' + (st.phaseDone ? ' disabled' : '') + '><span>Tight</span></div>' + msg +
+        (st.phaseDone ? '<div class="cpr-actions"><button class="btn btn-primary btn-lg" data-lab="next">Next →</button></div>' : '<div class="cpr-actions"><button class="btn btn-primary" data-lab="slide-check">' + esc(ph.btn) + '</button></div>');
     }
     body += '<div class="lab-foot"><button class="btn btn-sm" data-lab="quit">Exit</button><span class="small muted">Score so far: ' + Math.round(st.pts) + ' / ' + st.max + '</span></div>';
   }
   st.root.innerHTML = '<div class="cpr-card lab-card">' + head + '<div class="cpr-body">' + body + '</div></div>';
-  const f = st.root.querySelector('[data-lab="next"], [data-lab="start"], [data-lab="done"]'); if (f) f.focus();
+  // No auto-focus after a hold: a held Space key would otherwise land on the new Next button.
+  const f = st.phase === 'hold' ? null : st.root.querySelector('[data-lab="next"], [data-lab="start"], [data-lab="done"]'); if (f) f.focus();
 }
 
 /* ───────── Skills Lab page ───────── */
