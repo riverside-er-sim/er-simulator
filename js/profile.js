@@ -17,7 +17,7 @@ const ICONS = [['steth', 'Stethoscope'], ['Cardiology', 'Heart'], ['Neurology', 
 
 function xp(S) {
   const c = S.career || {}, quiz = Object.values((S.edu || {}).completed || {}).reduce((a, b) => a + b, 0);
-  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5;
+  return c.correct * 10 + c.incorrect * 2 + c.discharged * 25 + c.rescues * 15 + c.exams + quiz * 5 + c.bestStreak * 3 + (c.goodTests || 0) * 3 + (c.readsOk || 0) * 5 + (c.talkOk || 0) * 8 + (c.triageOk || 0) * 5 + (c.dxBonus || 0) + (c.cprSaves || 0) * 20 + (c.cprPractice ? 10 : 0);
 }
 function rank(S) {
   const x = xp(S); let i = 0;
@@ -44,6 +44,9 @@ function achievements(S) {
     { id: 'listener', name: 'Good Listener', desc: 'Handle 5 patient or family conversations well.', got: (c.talkOk || 0) >= 5, icon: 'steth' },
     { id: 'triage', name: 'Triage Pro', desc: 'Assign 10 correct triage levels.', got: (c.triageOk || 0) >= 10, icon: 'Emergency Medicine' },
     { id: 'steward', name: 'Smart Tester', desc: 'Order 20 useful tests.', got: (c.goodTests || 0) >= 20, icon: 'flask' },
+    { id: 'detective', name: 'Medical Detective', desc: 'Guess 5 final diagnoses correctly.', got: (c.dxOk || 0) >= 5, icon: 'eye' },
+    { id: 'cpr', name: 'Heart Restarter', desc: 'Bring a patient back with good CPR.', got: (c.cprSaves || 0) >= 1, icon: 'Cardiology' },
+    { id: 'cprpro', name: 'Steady Hands', desc: 'Score 90% or more in CPR Practice.', got: (c.cprBest || 0) >= 90, icon: 'check' },
     { id: 'chief', name: 'Chief of the ER', desc: 'Reach the highest rank.', got: rank(S).level === RANKS.length, icon: 'Pediatrics' }
   ];
 }
@@ -67,7 +70,7 @@ function view(ui, S, icon) {
     '<div class="bar" style="height:10px"><i style="width:' + r.pct + '%"></i></div>' +
     '<div class="small muted" style="margin-top:6px">' + (r.next ? (r.next.xp - r.xp) + ' XP to <b>' + esc(r.next.name) + '</b>' : 'Highest rank reached!') + '</div>' +
     '<ol class="ranks">' + RANKS.map((k, i) => '<li class="' + (i < r.level ? 'reached' : '') + (i === r.level - 1 ? ' cur' : '') + '"><span>' + esc(k.name) + '</span><span class="mono small">' + k.xp + ' XP</span></li>').join('') + '</ol>' +
-    '<p class="small muted" style="margin-bottom:0">Earn XP: correct decision +10 · learning from a mistake +2 · safe discharge +25 · emergency handled +15 · body exam +1 · quiz point +5 · useful test +3 · image read correctly +5 · good conversation +8 · correct triage +5.</p></div></div>';
+    '<p class="small muted" style="margin-bottom:0">Earn XP: correct decision +10 · learning from a mistake +2 · safe discharge +25 · emergency handled +15 · body exam +1 · quiz point +5 · useful test +3 · image read correctly +5 · good conversation +8 · correct triage +5 · correct diagnosis up to +25 · CPR save +20.</p></div></div>';
   h += '<div class="prof-right"><div class="panel"><div class="panel-title">' + icon('steth', 18) + 'Character Details</div><div class="prof-form">' +
     '<div class="form-row"><label for="prof-name">Doctor Name</label><input id="prof-name" data-prof="name" maxlength="28" placeholder="e.g. Alex Rivera" value="' + esc(p.name) + '"></div>' +
     '<div class="form-row"><label for="prof-spec">Dream Specialty</label><select id="prof-spec" data-prof="specialty">' + SPECIALTIES.map(x => '<option' + (x === p.specialty ? ' selected' : '') + '>' + x + '</option>').join('') + '</select></div>' +
@@ -86,7 +89,9 @@ function view(ui, S, icon) {
     st('Triage Accuracy', (c.triages ? Math.round(100 * (c.triageOk || 0) / c.triages) + '%' : '—'), (c.triages || 0) + ' patients triaged') +
     st('Images Read', (c.readsOk || 0) + '/' + (c.reads || 0), 'ECGs and X-rays correct') +
     st('Conversations', (c.talkOk || 0) + '/' + (c.talks || 0), 'handled well') +
-    st('Useful Tests', c.goodTests || 0, (c.extraTests || 0) + ' not needed') + '</div>';
+    st('Useful Tests', c.goodTests || 0, (c.extraTests || 0) + ' not needed') +
+    st('Diagnoses', (c.dxOk || 0) + '/' + (c.dxTotal || 0), 'guessed correctly') +
+    st('CPR', (c.cprSaves || 0) + ' saved', 'best practice score ' + (c.cprBest || 0) + '%') + '</div>';
   h += '<div class="panel"><div class="panel-title">' + icon('check', 18) + 'Achievements<span class="exam-count">' + got + ' of ' + ach.length + ' Unlocked</span></div><div class="ach-grid">' +
     ach.map(a => '<div class="ach' + (a.got ? ' got' : '') + '"><div class="ach-ic">' + icon(a.icon, 22) + '</div><div><b>' + esc(a.name) + '</b><div class="small">' + esc(a.desc) + '</div></div></div>').join('') + '</div></div></div></div>';
   return h;

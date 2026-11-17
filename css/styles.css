@@ -432,6 +432,42 @@ button.term:hover,button.term:focus-visible{background:var(--blue-soft)}
 .term-pop{position:fixed;z-index:300;max-width:300px;background:var(--navy);color:#fff;border-radius:10px;padding:10px 12px;font-size:13.5px;line-height:1.4;box-shadow:0 8px 24px rgba(0,0,0,.3)}
 .term-pop b{display:block;text-transform:capitalize;margin-bottom:3px;color:#cfe0ff}
 
+/* Diagnosis bonus */
+.dx-strip{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;background:#f3ecfc;border:1px solid #dccbf5;border-radius:10px;padding:9px 12px;margin-bottom:14px;font-size:14px}
+.dx-strip span{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.dx-strip.done{background:var(--bg);border-color:var(--line)}
+/* CPR mini-game */
+.cpr-bg{position:fixed;inset:0;z-index:250;background:rgba(8,14,28,.82);display:grid;place-items:center;padding:16px}
+.cpr-card{background:#fff;border-radius:16px;width:min(520px,100%);max-height:94vh;overflow:auto;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.cpr-head{display:flex;align-items:center;gap:10px;padding:12px 16px;color:#fff;font-weight:800;letter-spacing:.6px}
+.cpr-head span:last-child{margin-left:auto;font-weight:600;font-size:13px;letter-spacing:0;opacity:.9}
+.cpr-head.code{background:var(--crit)}.cpr-head.practice{background:var(--navy)}
+.cpr-head .dot{width:10px;height:10px;border-radius:50%;background:#fff;animation:pulse .8s infinite}
+.cpr-body{padding:16px;display:flex;flex-direction:column;gap:10px}
+.cpr-lead{margin:0;font-size:15px}
+.cpr-tips{margin:0;padding-left:20px;font-size:14px}
+.cpr-note{color:var(--ink-2);margin:0}
+.cpr-actions{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap}
+.cpr-round{font-weight:800;color:var(--ink-2);text-align:center}
+.cpr-chest{width:200px;max-width:60%;margin:0 auto;display:block}
+.cpr-hands{transition:transform .08s}
+.cpr-hands.down{transform:translateY(10px)}
+.cpr-live{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.cpr-live b{display:block;font-size:22px;font-family:var(--mono)}
+.cpr-rate.good{color:var(--stab)}.cpr-rate.slow{color:#b45309}.cpr-rate.fast{color:var(--crit)}
+.cpr-metro{border:1px solid var(--line);background:#fff;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px;color:var(--ink-2)}
+.cpr-metro-dot{width:10px;height:10px;border-radius:50%;background:var(--line)}
+.cpr-metro-dot.on{background:var(--blue)}
+.cpr-gauge{position:relative;height:16px;border-radius:8px;background:linear-gradient(90deg,#fde3c8,#fff1e5 40%,#fdecec 60%,#f9c9c9);margin-bottom:18px}
+.cpr-zone{position:absolute;top:0;bottom:0;background:#bfe5c4;border-left:2px solid var(--stab);border-right:2px solid var(--stab)}
+.cpr-gauge i{position:absolute;top:-4px;width:6px;height:24px;border-radius:3px;background:var(--navy)}
+.cpr-scale{position:absolute;top:18px;left:0;right:0;display:flex;justify-content:space-between;font-size:10.5px;color:var(--ink-3);font-family:var(--mono)}
+.cpr-msg{text-align:center;font-weight:700;min-height:20px}
+.cpr-push{border:0;background:var(--crit);color:#fff;font-size:26px;font-weight:900;letter-spacing:2px;border-radius:16px;padding:22px;box-shadow:0 6px 0 #8e1b1b;touch-action:manipulation;user-select:none}
+.cpr-push:active{transform:translateY(4px);box-shadow:0 2px 0 #8e1b1b}
+.cpr-breaths{text-align:center;font-weight:700;color:var(--blue);padding:10px}
+.cpr-result h3{font-size:20px;margin-bottom:6px}
+
 /* ── Responsive ── */
 @media (max-width:1050px){
   .room{grid-template-columns:1fr;grid-template-areas:"mon" "exam" "dec" "upd" "res" "trend" "info" "act"}

@@ -154,6 +154,8 @@ window.SND = {
   setRoom(r) { const was = room; room = r; if (r && !was && ctx) { nextBeat = ctx.currentTime + 0.2; nextAlarm = ctx.currentTime + 1; } },
   alert() { if (!ctx || !cfg.on || !cfg.alarms) return; const t = ctx.currentTime; [0, 0.22].forEach(o => tone(alarmBus, 880, t + o, 0.18, 0.12)); },
   exam: playExam,
+  click() { if (!unlock() || !cfg.on) return; tone(examBus, 1500, ctx.currentTime + 0.005, 0.035, 0.09, 'square'); },
+  thump() { if (!unlock() || !cfg.on) return; thump(examBus, ctx.currentTime + 0.005, 70, 0.12, 0.55); },
   stopExam: stopExam,
   get ready() { return !!ctx && ctx.state === 'running'; }
 };

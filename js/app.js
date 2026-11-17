@@ -449,7 +449,16 @@ function updateStatus(p) {
     p.lastAlertSev = p.severity; p.alertVitals = vitals(p);
   }
 }
-function die(p) {
+function startArrest(p) {
+  p.arrest = { at: S.clock };
+  rec(p, 'status', 'CARDIAC ARREST — no pulse. Code Blue called.');
+  addUpdate(p, 'CARDIAC ARREST — no pulse. CODE BLUE: start CPR now!', 'critical');
+  raiseAlert(p, 'CODE BLUE', 'Patient ' + p.num + ' is in cardiac arrest! Go to their room and start CPR within 10 minutes (by ' + fmtClock(S.clock + 10) + ').', 'Critical');
+  ui.beep = true;
+}
+function die(p, why) {
+  if (why) rec(p, 'outcome', why);
+  p.arrest = null; scoreDx(p);
   S.career.deaths++;
   p.outcome = 'deceased'; p.outcomeTime = S.clock; p.rescueActive = false; p.feedback = p.feedback || null;
   rec(p, 'status', 'Status changed: ' + p.status + ' → Deceased');
@@ -471,7 +480,11 @@ function tickPatient(p, step) {
       raiseAlert(p, 'Clinical event', 'Patient ' + p.num + ': ' + ev.text, computeStatus(p));
     }
   });
-  if (c.canDie && p.severity >= 100) { die(p); return; }
+  if (c.canDie && p.severity >= 100) {
+    if (!p.arrest) startArrest(p);
+    else if (S.clock - p.arrest.at >= 10) die(p, 'No CPR was started within 10 minutes of the cardiac arrest.');
+    return;
+  }
   if (c.canDie && p.severity >= 75 && !p.rescueActive) {
     p.rescueActive = true; p.order = null; ui.selected[p.id] = null;
     addUpdate(p, 'Condition critical — EMERGENCY INTERVENTION REQUIRED.', 'critical');
@@ -773,6 +786,68 @@ function eventsBanner() {
   return ev.length ? '<div class="events-banner">' + icon('info', 18) + '<b>Hospital Status:</b> ' + ev.map(esc).join(' · ') + '</div>' : '';
 }
 
+
+/* ───────── Diagnosis bonus & Code Blue (CPR) ───────── */
+function dxOptions(p) {
+  if (p.dxOpts) return p.dxOpts;
+  const c = caseOf(p);
+  let wrong = ((window.CASE_DDX || {})[p.caseId] || []).map(tc).slice(0, 3);
+  if (wrong.length < 3) {
+    const pool = shuffle(LIB.filter(x => x.id !== c.id && x.finalDiagnosis !== c.finalDiagnosis)).sort((a, b) => (b.specialty === c.specialty) - (a.specialty === c.specialty));
+    pool.forEach(x => { if (wrong.length < 3 && wrong.indexOf(x.finalDiagnosis) < 0) wrong.push(x.finalDiagnosis); });
+  }
+  p.dxOpts = shuffle(wrong.concat([c.finalDiagnosis]));
+  return p.dxOpts;
+}
+function dxStrip(p) {
+  if (isClosed(p)) return '';
+  if (p.dx) return '<div class="dx-strip done">' + icon('check', 16) + '<span><b>Your diagnosis:</b> ' + esc(p.dx.choice) + ' <span class="small muted">— you\'ll find out if you were right in the case debrief.</span></span></div>';
+  const bonus = Math.max(5, 25 - 5 * p.decisionIndex);
+  return '<div class="dx-strip"><span>' + icon('eye', 16) + '<b>What\'s the diagnosis?</b> <span class="small muted">One guess per case. Guess correctly now for +' + bonus + ' XP — earlier guesses earn more.</span></span><button class="btn btn-sm btn-primary" data-act="dx-open" data-id="' + p.id + '">Make a Diagnosis</button></div>';
+}
+function dxModal(p) {
+  const opts = dxOptions(p), sel = (ui.dxSel || {})[p.id];
+  return '<div class="modal-h"><h2>What\'s the Diagnosis? · Patient ' + p.num + '</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b">' +
+    '<p class="small" style="margin-top:0">Think about the symptoms, exam findings and test results so far. You only get one guess for this case.</p><div class="opts">' +
+    opts.map((o, i) => '<button class="opt' + (sel === i ? ' sel' : '') + '" data-act="dx-pick" data-i="' + i + '" data-id="' + p.id + '"><span class="L">' + LET[i] + '</span><span>' + esc(o) + '</span></button>').join('') + '</div></div>' +
+    '<div class="modal-f"><button class="btn" data-act="close">Keep Investigating</button><button class="btn btn-primary" data-act="dx-submit" data-id="' + p.id + '"' + (sel == null ? ' disabled' : '') + '>Lock In Diagnosis</button></div>';
+}
+function scoreDx(p) {
+  if (!p.dx || p.dx.scored) return;
+  p.dx.scored = true;
+  if (p.dx.ok) { p.dx.bonus = Math.max(5, 25 - 5 * p.dx.at); S.career.dxOk = (S.career.dxOk || 0) + 1; S.career.dxBonus = (S.career.dxBonus || 0) + p.dx.bonus; }
+  S.career.dxTotal = (S.career.dxTotal || 0) + 1;
+}
+function codePanel(p) {
+  const left = Math.max(0, 10 - (S.clock - p.arrest.at));
+  return '<div class="dec"><div class="emergency-banner"><span class="dot"></span>CODE BLUE — CARDIAC ARREST</div>' +
+    '<div class="findings em"><b>The patient has no pulse and is not breathing normally.</b> The resuscitation team is here with the defibrillator. You need to start chest compressions now — every minute without CPR lowers the chance of survival.</div>' +
+    '<p><b>Time left to start CPR:</b> <span class="mono">' + left + ' simulated minute' + (left === 1 ? '' : 's') + '</span> (by ' + fmtClock(p.arrest.at + 10) + ')</p>' +
+    '<div class="submit-row"><span class="small muted">You\'ll tap PUSH (or the space bar) at 100–120 per minute for 2 rounds of 30.</span><button class="btn btn-danger btn-lg" data-act="cpr-start" data-id="' + p.id + '">START CPR</button></div></div>';
+}
+function arrestMonitor(p) {
+  let d = 'M0 40'; for (let x = 0; x <= 600; x += 6) d += ' L' + x + ' ' + (40 + Math.sin(x * 0.21) * 14 * Math.sin(x * 0.037 + 1) + Math.sin(x * 0.53) * 5).toFixed(1);
+  return '<div class="monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + ' · PATIENT ' + p.num + '</span><span>' + fmtClock(S.clock) + '</span></div>' +
+    '<div class="ecg"><svg viewBox="0 0 300 80" preserveAspectRatio="none" style="width:100%"><g class="track" style="--shift:-300px;animation-duration:3s"><path d="' + d + '" fill="none" stroke="#f87171" stroke-width="1.6" vector-effect="non-scaling-stroke"/></g></svg></div>' +
+    '<div class="mon-off" style="height:auto;padding:18px 0;color:#f87171;font-size:22px;font-weight:800">NO PULSE · CARDIAC ARREST<br><span style="font-size:13px;color:#8ea3c4">Chaotic heart rhythm — start CPR</span></div></div>';
+}
+function finishCpr(pid, res) {
+  const p = S.patients.find(x => x.id === pid); if (!p || !p.arrest || !res) { render(); return; }
+  S.career.cprTries = (S.career.cprTries || 0) + 1;
+  if (res.pass) {
+    p.arrest = null; p.severity = 82; p.rescueActive = true; p.order = null;
+    S.career.cprSaves = (S.career.cprSaves || 0) + 1;
+    rec(p, 'intervention', 'CPR performed: ' + res.score + '% of compressions at the right speed (average ' + res.avgRate + '/min). Pulse returned (ROSC).');
+    addUpdate(p, 'Pulse is back after CPR (return of spontaneous circulation). Still critical — emergency care continues.', 'critical');
+    advanceTime(4); updateStatus(p);
+  } else {
+    rec(p, 'intervention', 'CPR performed: ' + res.score + '% of compressions at the right speed (average ' + res.avgRate + '/min). The heart did not restart.');
+    advanceTime(4);
+    if (!isClosed(p)) die(p, 'Resuscitation was not successful.');
+  }
+  save(); render(); window.scrollTo(0, 0);
+}
+
 /* ───────── Actions ───────── */
 function submitDecision(p, optIdx) {
   const c = caseOf(p), isRescue = p.rescueActive, d = currentDecision(p);
@@ -833,6 +908,7 @@ function dischargeEval(p) {
 function confirmDischarge(p) {
   const ev = dischargeEval(p); if (!ev.ok) return;
   p.outcome = 'discharged'; p.outcomeTime = S.clock; p.rescueActive = false;
+  scoreDx(p);
   S.career.discharged++; if (p.log.filter(l => !l.pre).length && p.log.filter(l => !l.pre).every(l => l.correct)) S.career.perfect++;
   rec(p, 'status', 'Status changed: ' + p.status + ' → Discharged'); p.status = 'Discharged';
   rec(p, 'outcome', 'Disposition: ' + ev.disp.label + '. Total time under care: ' + fmtDur(S.clock - p.arrival) + '.');
@@ -878,7 +954,7 @@ function syncSound() {
     if (p && !isClosed(p)) {
       const v = vitals(p);
       const lvl = (p.rescueActive || p.status === 'Critical') ? 2 : (['hr', 'sbp', 'spo2', 'rr'].some(k => abnormal(k, v[k], p.age)) ? 1 : 0);
-      r = { hr: v.hr, spo2: v.spo2, level: lvl, rhythm: p.caseId.indexOf('afib') >= 0 ? 'irregular' : 'regular' };
+      r = { hr: p.arrest ? 0 : v.hr, spo2: v.spo2, level: lvl, rhythm: p.caseId.indexOf('afib') >= 0 ? 'irregular' : 'regular' };
     }
   }
   SND.setRoom(r);
@@ -995,6 +1071,7 @@ function card(p) {
   let wait;
   if (p.outcome === 'deceased') wait = '<div class="waiting none">Died at ' + fmtClock(p.outcomeTime) + ' · see record for debrief</div>';
   else if (p.outcome === 'discharged') wait = '<div class="waiting ok">' + icon('check', 16) + esc((c.disposition || {}).label || 'Discharged') + '</div>';
+  else if (p.arrest) wait = '<div class="waiting em"><span class="dot"></span>CODE BLUE — Cardiac Arrest! Start CPR</div>';
   else if (p.rescueActive) wait = '<div class="waiting em"><span class="dot"></span>EMERGENCY Intervention Required</div>';
   else if (p.feedback) wait = '<div class="waiting none">' + icon('eye', 16) + 'Review Result of Your Last Decision</div>';
   else if (p.needsTriage) wait = '<div class="waiting em"><span class="dot"></span>New Arrival — Needs Triage</div>';
@@ -1024,7 +1101,7 @@ function viewRoom(id) {
   h += '<div class="room">' +
     '<section class="a-mon">' + monitor(p) + '</section>' +
     '<section class="a-exam panel">' + examPanel(p) + '</section>' +
-    '<section class="a-dec panel">' + decisionPanel(p) + '</section>' +
+    '<section class="a-dec panel">' + dxStrip(p) + decisionPanel(p) + '</section>' +
     '<section class="a-trend panel"><div class="panel-title">' + icon('chart', 18) + 'Vital sign trends</div>' + trends(p) + '</section>' +
     '<section class="a-info panel">' + infoPanel(p) + '</section>' +
     '<section class="a-res panel">' + resultsPanel(p) + '</section>' +
@@ -1052,6 +1129,7 @@ function monitor(p) {
   const v = vitals(p);
   if (!v) return '<div class="monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + '</span><span>MONITOR</span></div><div class="mon-off">Monitoring discontinued.<br>Time of death ' + fmtClock(p.outcomeTime) + '.</div></div>';
   if (p.outcome === 'discharged') return '<div class="monitor"><div class="mon-top"><span>BED ' + esc(p.bed) + '</span><span>MONITOR</span></div><div class="mon-off">Patient discharged at ' + fmtClock(p.outcomeTime) + '.<br>Last vitals: ' + esc(vitalsText(v)) + '</div></div>';
+  if (p.arrest) return arrestMonitor(p);
   const dur = 6;
   const al = (k) => abnormal(k, v[k], p.age) ? ' alarm' : '';
   const sev = Math.round(p.severity);
@@ -1137,6 +1215,7 @@ function decisionPanel(p) {
   if (p.outcome === 'discharged') {
     return '<div class="outcome"><div class="big" style="background:var(--stab-bg);color:var(--stab)">' + icon('check', 32) + '</div><h2>Case Complete</h2><p class="muted">' + esc((c.disposition || {}).label) + ' at ' + fmtClock(p.outcomeTime) + '.</p>' + debrief(p) + '</div>';
   }
+  if (p.arrest) return codePanel(p);
   if (p.needsTriage) return triagePanel(p);
   if (p.triageFb) return triageFbView(p);
   if (p.talkFb) return talkFbView(p);
@@ -1183,6 +1262,7 @@ function debriefExtras(p) {
   if (p.triage) h += '<h4 style="margin-top:10px">Triage</h4>You chose level ' + p.triage.level + ' (correct: ' + p.triage.correct + ').';
   if (o.length) h += '<h4 style="margin-top:10px">Tests Ordered</h4>' + good + ' useful, ' + extra + ' not needed.';
   if (reads.length) h += '<h4 style="margin-top:10px">Images You Read</h4>' + readOk + ' of ' + reads.length + ' read correctly.';
+  if (p.dx) h += '<h4 style="margin-top:10px">Your Diagnosis</h4>' + esc(p.dx.choice) + (p.dx.ok ? ' — <span class="ok-t">correct! +' + (p.dx.bonus || 0) + ' XP</span>' : ' — <span class="bad-t">not quite</span> (the answer is above)');
   const talk = p.log.find(l => l.talk); if (talk) h += '<h4 style="margin-top:10px">Bedside Manner</h4>' + (talk.correct ? 'Handled the conversation well.' : 'The conversation could have gone better.');
   return h;
 }
@@ -1350,6 +1430,8 @@ function renderModal() {
     }
   } else if (m.type === 'confirm') {
     inner = '<div class="modal-h"><h2>' + esc(m.title) + '</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' + esc(m.text) + '</div><div class="modal-f"><button class="btn" data-act="close">Cancel</button><button class="btn btn-danger" data-act="confirm-yes">' + esc(m.yes) + '</button></div>';
+  } else if (m.type === 'dx') {
+    const dp = S.patients.find(x => x.id === m.id); inner = dp ? dxModal(dp) : '';
   } else if (m.type === 'signin') {
     inner = signinModalHtml();
   } else if (m.type === 'settings') {
@@ -1422,6 +1504,11 @@ document.addEventListener('click', e => {
     case 'esi-pick': if (p) { ui.esiSel = ui.esiSel || {}; ui.esiSel[p.id] = +t.getAttribute('data-level'); ui.keepScroll = true; render(); } break;
     case 'triage-submit': if (p) { submitTriage(p); save(); render(); window.scrollTo(0, 0); } break;
     case 'triage-continue': if (p) { p.triageFb = null; save(); render(); window.scrollTo(0, 0); } break;
+    case 'dx-open': if (p) { ui.modal = { type: 'dx', id: p.id }; renderModal(); } break;
+    case 'dx-pick': if (p) { ui.dxSel = ui.dxSel || {}; ui.dxSel[p.id] = +t.getAttribute('data-i'); renderModal(); } break;
+    case 'dx-submit': if (p && ui.dxSel && ui.dxSel[p.id] != null) { const ch = dxOptions(p)[ui.dxSel[p.id]]; p.dx = { choice: ch, ok: ch === caseOf(p).finalDiagnosis, at: p.decisionIndex }; rec(p, 'decision', 'Working diagnosis chosen: ' + ch); ui.modal = null; save(); ui.keepScroll = true; render(); } break;
+    case 'cpr-start': if (p && window.CPR) { const pid = p.id; CPR.open({ title: 'Patient ' + p.num + ' · ' + p.bed, attempts: 2, onDone: res => finishCpr(pid, res) }); } break;
+    case 'cpr-practice': if (window.CPR) CPR.open({ title: 'Training Mannequin', practice: true, onDone: res => { if (res && res.score != null) { S.career.cprBest = Math.max(S.career.cprBest || 0, res.score); S.career.cprPractice = (S.career.cprPractice || 0) + 1; save(); render(); } } }); break;
     case 'toggle-sound': S.settings.soundOn = S.settings.soundOn === false; if (window.SND) SND.unlock(); save(); renderTop(); syncSound(); break;
     case 'toggle-live': S.settings.live = !S.settings.live; save(); renderTop(); break;
     case 'submit': if (p && ui.selected[p.id] != null) { ui.keepScroll = false; submitDecision(p, ui.selected[p.id]); window.scrollTo(0, 0); } break;
@@ -1500,7 +1587,7 @@ document.addEventListener('pointerdown', e => { if (e.target.closest && e.target
 
 /* Live clock */
 setInterval(() => {
-  if (!S.settings.live || ui.modal || document.hidden) return;
+  if (!S.settings.live || ui.modal || document.hidden || (window.CPR && CPR.active)) return;
   advanceTime(5); save(); ui.keepScroll = true; render();
 }, 20000);
 

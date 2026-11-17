@@ -147,6 +147,24 @@ const TOPICS = [
   ]
 },
 {
+  id: 'cpr', title: 'CPR: Restarting a Heart', icon: '💓',
+  body: `
+<p>When the heart stops pumping (<b>cardiac arrest</b>), blood stops reaching the brain. Without help, brain damage starts within minutes. <b>CPR</b> (cardiopulmonary resuscitation) pushes blood around the body by hand until the heart can be restarted.</p>
+<h3>The chain of survival</h3>
+<ol><li><b>Check:</b> is the scene safe? Does the person respond when you tap them and shout? Are they breathing normally?</li><li><b>Call for help:</b> call the emergency number (911 in the US) and send someone to fetch an <b>AED</b> (automated external defibrillator).</li><li><b>Push hard and fast</b> in the center of the chest — <b>100 to 120 pushes per minute</b>.</li><li><b>Use the AED</b> as soon as it arrives. It talks you through every step and only shocks if a shock is needed.</li></ol>
+<div class="callout"><b>Hands-only CPR:</b> if you are not trained in rescue breaths, chest compressions alone still save lives. The speed matters: too slow doesn't move enough blood, too fast doesn't let the heart refill.</div>
+<h3>In the hospital</h3>
+<p>A <b>Code Blue</b> means a patient's heart has stopped. A team rushes in: one person does compressions, others give breaths with a bag and mask, attach the defibrillator, and look for the cause. People swap every 2 minutes because good compressions are tiring.</p>
+<div class="callout warn"><b>Learn it for real:</b> many organizations run CPR classes for teens. Practicing on a mannequin with an instructor is the best way to learn how deep and how fast to push.</div>
+<button class="btn btn-danger btn-lg" data-act="cpr-practice" style="margin-top:8px">💓 Practice CPR Now</button>`,
+  quiz: [
+    { q: 'How fast should chest compressions be?', o: ['40–60 per minute', '60–80 per minute', '100–120 per minute', '160–200 per minute'], a: 2, e: '100–120 compressions per minute moves the most blood.' },
+    { q: 'You find someone collapsed. After checking it is safe, what comes next?', o: ['Give them a drink of water', 'Check if they respond and call for help', 'Wait 10 minutes to see if they wake up', 'Lift their legs and leave'], a: 1, e: 'Check responsiveness, then call the emergency number and get an AED — help needs to be on the way fast.' },
+    { q: 'What does an AED do?', o: ['Measures blood sugar', 'Checks the heart rhythm and gives a shock if needed', 'Gives oxygen through the nose', 'Takes an X-ray'], a: 1, e: 'An AED analyzes the rhythm and tells you whether to shock. Anyone can use one — it gives spoken instructions.' },
+    { q: 'If you are not trained in rescue breaths, you should…', o: ['Do nothing until trained help arrives', 'Do hands-only CPR: push hard and fast in the center of the chest', 'Only give rescue breaths', 'Shake the person until they wake'], a: 1, e: 'Hands-only CPR is far better than doing nothing.' }
+  ]
+},
+{
   id: 'study', title: 'How to learn medicine', icon: '🎓',
   body: `
 <p>Becoming a doctor is a long journey — and it starts with how you learn, not how much you memorize.</p>
