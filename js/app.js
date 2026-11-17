@@ -15,6 +15,7 @@ function tcCases() {
   });
 }
 const KEY = 'erSim.save.v1';
+let activeKey = KEY; // switches to a per-player key while signed in
 const VKEYS = ['hr', 'sbp', 'dbp', 'rr', 'spo2', 'temp'];
 const RANK = { 'Discharged': -1, 'Stable': 0, 'Improving': 1, 'Needs Assessment': 2, 'Unstable': 3, 'Critical': 4, 'Deceased': 5 };
 const SPECIALTIES = ['Cardiology', 'Respiratory', 'Neurology', 'Gastroenterology', 'Infectious Disease', 'Endocrinology', 'Trauma', 'Orthopedics', 'Pediatrics', 'Emergency Medicine'];
@@ -87,7 +88,7 @@ function icon(name, size) { size = size || 20; return '<svg width="' + size + '"
 /* ───────── Persistence ───────── */
 function save() {
   S.savedAt = Date.now();
-  try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
+  try { localStorage.setItem(activeKey, JSON.stringify(S)); } catch (e) { /* storage unavailable */ }
   cloudSave();
 }
 /* Account save (when opened as a shared Claude artifact): one private document per viewer. */
@@ -97,11 +98,12 @@ function cloudSave() {
   clearTimeout(cloudTimer);
   cloudTimer = setTimeout(() => {
     try {
+      const L = cloud.limit || 230000;
       let json = JSON.stringify(S);
-      for (let i = (S.history || []).length - 1; i >= 1 && json.length > 230000; i--) { S.history[i].patients.forEach(ap => { if (ap.record && ap.record.length) { ap.record = []; ap.trimmed = true; } }); json = JSON.stringify(S); }
-      if (json.length > 230000) { S.alerts = S.alerts.slice(0, 15); S.patients.forEach(p => { p.vh = p.vh.slice(-40); }); json = JSON.stringify(S); }
-      if (json.length > 250000) { const keep = S.patients.filter(p => !isClosed(p)); json = JSON.stringify(Object.assign({}, S, { patients: keep })); }
-      cloud.ref.set({ json: json, savedAt: S.savedAt || Date.now() }).catch(() => {});
+      for (let i = (S.history || []).length - 1; i >= 1 && json.length > L; i--) { S.history[i].patients.forEach(ap => { if (ap.record && ap.record.length) { ap.record = []; ap.trimmed = true; } }); json = JSON.stringify(S); }
+      if (json.length > L) { S.alerts = S.alerts.slice(0, 15); S.patients.forEach(p => { p.vh = p.vh.slice(-40); }); json = JSON.stringify(S); }
+      if (json.length > L + 20000) { const keep = S.patients.filter(p => !isClosed(p)); json = JSON.stringify(Object.assign({}, S, { patients: keep })); }
+      cloud.ref.set({ json: json, savedAt: S.savedAt || Date.now() }).then(() => { if (account && account.error) { account.error = ''; renderTop(); } }).catch(e => { if (account) { account.error = 'Not saving to your account right now (' + ((e && e.code) || 'error') + '). Your game is still saved on this device.'; renderTop(); } });
     } catch (e) { /* ignore */ }
   }, 1500);
 }
@@ -129,9 +131,111 @@ async function initCloud() {
     cloudSave();
   } catch (e) { /* account save unavailable: browser storage still works */ }
 }
-function load() {
+/* ───────── Username & password accounts (public website, via Firebase) ─────────
+   Each player's save is one private document: saves/{uid}. Firestore security rules
+   allow only approved player ids to read or write their own document. */
+const FB_CONFIG = {
+  apiKey: 'AIzaSyC6shByNnE4U4GIqAo0YaHewmHSuSf5onU',
+  authDomain: 'riverside-er-sim.firebaseapp.com',
+  projectId: 'riverside-er-sim',
+  storageBucket: 'riverside-er-sim.firebasestorage.app',
+  messagingSenderId: '1079386681301',
+  appId: '1:1079386681301:web:ed30f3fa1dff2ee94cd75c'
+};
+const USER_DOMAIN = '@riverside-er-sim.invalid';
+let fbAuth = null, fbDb = null, account = null;
+function accountsAvailable() { return !!fbAuth; }
+function hasProgress(s) {
+  return !!s && ((s.stats && s.stats.correct + s.stats.incorrect > 0) || (s.history && s.history.length) || (s.career && s.career.correct + s.career.incorrect > 0) || (s.profile && s.profile.name));
+}
+function initAccounts() {
   try {
-    const raw = localStorage.getItem(KEY); if (!raw) return null;
+    if (window.claude || !window.firebase || typeof firebase.initializeApp !== 'function') return;
+    if (!firebase.apps.length) firebase.initializeApp(FB_CONFIG);
+    fbAuth = firebase.auth(); fbDb = firebase.firestore();
+    fbAuth.onAuthStateChanged(u => {
+      if (u) onSignedIn(u);
+      else if (account) onSignedOut();
+      else promptSignInOnce();
+    });
+  } catch (e) { fbAuth = null; }
+}
+function promptSignInOnce() {
+  let seen = false;
+  try { seen = sessionStorage.getItem('erSim.signinPrompted') === '1'; sessionStorage.setItem('erSim.signinPrompted', '1'); } catch (e) { }
+  if (!seen && !ui.modal) { ui.modal = { type: 'signin' }; render(); }
+}
+async function onSignedIn(u) {
+  const username = (u.email || '').replace(USER_DOMAIN, '');
+  const cacheKey = KEY + '.' + u.uid;
+  account = { uid: u.uid, username: username, error: '' };
+  if (ui.modal && ui.modal.type === 'signin') ui.modal = null;
+  ui.signin = null;
+  const ref = fbDb.collection('saves').doc(u.uid);
+  let remote = null;
+  try {
+    const snap = await ref.get();
+    if (snap.exists) { const r = JSON.parse((snap.data() || {}).json || 'null'); if (r && r.v === 1 && Array.isArray(r.patients)) remote = r; }
+  } catch (e) {
+    account.error = (e && e.code === 'permission-denied') ? 'This account is not approved for saving yet. Ask a parent to finish setting it up.' : 'Could not reach your account right now. Your game is saved on this device and will sync later.';
+  }
+  const cached = load(cacheKey);
+  let next = remote && cached ? ((cached.savedAt || 0) > (remote.savedAt || 0) ? cached : remote) : (remote || cached);
+  cloud = null; activeKey = cacheKey;
+  if (!next) {
+    let migrated = false;
+    try { migrated = localStorage.getItem(KEY + '.migrated') === '1'; } catch (e) { }
+    if (!migrated && hasProgress(S)) { next = S; try { localStorage.setItem(KEY + '.migrated', '1'); } catch (e) { } }
+    else { newState(); next = S; }
+  }
+  next.patients = next.patients.filter(p => CASES[p.caseId]);
+  S = next; normalize();
+  if (!account.error || account.error.indexOf('reach') >= 0) cloud = { ref: ref, limit: 900000 };
+  save(); ui.keepScroll = false; go('#/');
+}
+function onSignedOut() {
+  account = null; cloud = null; activeKey = KEY;
+  S = load(KEY);
+  if (!S) newState();
+  normalize(); go('#/');
+}
+async function signOut() {
+  try { if (cloud) { clearTimeout(cloudTimer); await cloud.ref.set({ json: JSON.stringify(S), savedAt: S.savedAt || Date.now() }); } } catch (e) { }
+  try { await fbAuth.signOut(); } catch (e) { }
+}
+function signInError(code) {
+  if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found' || code === 'auth/invalid-email') return 'That username or password isn\'t right. Check the spelling and try again.';
+  if (code === 'auth/too-many-requests') return 'Too many tries. Wait a few minutes, then try again.';
+  if (code === 'auth/network-request-failed') return 'Can\'t reach the internet right now. Check the connection and try again.';
+  return 'Sign-in didn\'t work (' + (code || 'unknown error') + ').';
+}
+function doSignIn() {
+  const uEl = document.getElementById('si-user'), pEl = document.getElementById('si-pass');
+  const user = (uEl ? uEl.value : '').trim().toLowerCase(), pass = pEl ? pEl.value : '';
+  ui.signin = { user: user, error: '', busy: true };
+  if (!user || !pass) { ui.signin = { user: user, error: 'Enter your username and password.' }; renderModal(); return; }
+  renderModal();
+  const email = user.indexOf('@') >= 0 ? user : user + USER_DOMAIN;
+  fbAuth.signInWithEmailAndPassword(email, pass).catch(err => { ui.signin = { user: user, error: signInError(err && err.code) }; renderModal(); });
+}
+function signinModalHtml() {
+  const si = ui.signin || {};
+  return '<div class="modal-h"><h2>Sign In</h2><button class="x" data-act="close" aria-label="Close">×</button></div><div class="modal-b">' +
+    '<p class="small" style="margin-top:0">Sign in to save your game to your account, so it works on any device. No account? Ask a parent, or play as a guest (saves in this browser only).</p>' +
+    '<div class="form-row"><label for="si-user">Username</label><input id="si-user" autocomplete="username" autocapitalize="none" spellcheck="false" value="' + esc(si.user || '') + '"></div>' +
+    '<div class="form-row"><label for="si-pass">Password</label><input id="si-pass" type="password" autocomplete="current-password"></div>' +
+    (si.error ? '<div class="qres bad" role="alert">' + esc(si.error) + '</div>' : '') + '</div>' +
+    '<div class="modal-f"><button class="btn" data-act="close">Play as Guest</button><button class="btn btn-primary" data-act="signin-go"' + (si.busy ? ' disabled' : '') + '>' + (si.busy ? 'Signing In…' : 'Sign In') + '</button></div>';
+}
+function accountButton() {
+  if (!accountsAvailable()) return '';
+  if (!account) return '<button class="tb-btn" data-act="signin" title="Sign in to save to your account">' + icon('body', 16) + '<span class="lbl">Sign In</span></button>';
+  return '<button class="tb-btn" data-act="menu-main" title="Signed in as ' + esc(account.username) + (account.error ? ' — ' + esc(account.error) : '') + '">' + icon('body', 16) + '<span class="lbl">' + esc(account.username) + (account.error ? ' ⚠' : '') + '</span></button>';
+}
+
+function load(key) {
+  try {
+    const raw = localStorage.getItem(key || KEY); if (!raw) return null;
     const s = JSON.parse(raw); if (!s || s.v !== 1 || !Array.isArray(s.patients)) return null;
     s.patients = s.patients.filter(p => CASES[p.caseId]);
     return s;
@@ -636,7 +740,7 @@ function renderTop() {
   let h = '<div class="tb">' +
     '<button class="brand" data-go="#/"><span class="brand-logo" style="color:var(--crit)">' + icon('Emergency Medicine', 22) + '</span><span>Riverside ER<small>Simulation · Fictional</small></span></button>' +
     '<nav class="tb-nav">' + nav.map(n => '<button class="' + ((r === n[0] || (n[0] === 'dash' && (r === 'room' || r === 'record')) || (n[0] === 'history' && r === 'past')) ? 'on' : '') + '" data-go="' + n[2] + '">' + n[1] + '</button>').join('') + '</nav>' +
-    '<div class="tb-right">' + profileChip() +
+    '<div class="tb-right">' + accountButton() + profileChip() +
       '<div class="clock" title="Simulated hospital clock"><b>' + fmtClock(S.clock) + '</b><span>' + fmtDay(S.clock) + ' · sim time</span></div>' +
       '<button class="tb-btn ' + (S.settings.live ? 'live' : '') + '" data-act="toggle-live" title="Live clock: when on, 5 simulated minutes pass every 20 real seconds">' + icon(S.settings.live ? 'pause' : 'play', 16) + '<span class="lbl">' + (S.settings.live ? 'Live' : 'Paused') + '</span></button>' +
       '<button class="tb-btn" data-act="toggle-sound" title="Hospital sounds on/off" aria-label="Hospital sounds">' + icon(S.settings.soundOn !== false ? 'speaker' : 'mute', 18) + '</button>' +
@@ -663,6 +767,7 @@ function alertsDropdown() {
 }
 function mainDropdown() {
   return '<div class="dropdown">' +
+    (account ? '<button data-act="signout">' + icon('exit', 18) + 'Sign Out (' + esc(account.username) + ')</button><hr>' : '') +
     '<button data-act="add-random">' + icon('plus', 18) + 'Admit a Random New Patient</button>' +
     '<button data-act="observe-all">' + icon('hourglass', 18) + 'Advance Clock 15 Min</button>' +
     '<button data-act="settings">' + icon('steth', 18) + 'Simulation Settings</button>' +
@@ -700,6 +805,8 @@ function viewDash() {
     stat('Deaths', closed.filter(p => p.outcome === 'deceased').length, 'this simulation') + '</div>';
   h += '<div class="toolbar"><label class="small muted" for="sort">Sort By</label><select id="sort" data-change="sort"><option value="priority"' + (ui.sort === 'priority' ? ' selected' : '') + '>Priority (Sickest First)</option><option value="number"' + (ui.sort === 'number' ? ' selected' : '') + '>Patient Number</option></select>' +
     '<span class="small muted">Time moves when you make decisions, observe, move between rooms, or with the Live clock on.</span></div>';
+  if (accountsAvailable() && !account) h += '<div class="prof-cta">' + icon('body', 22) + '<div><b>Playing as a Guest</b><div class="small">Your game saves in this browser only. Sign in to save it to your account and play on any device.</div></div><button class="btn btn-primary btn-sm" data-act="signin">Sign In</button></div>';
+  if (account && account.error) h += '<div class="prof-cta" style="border-color:var(--crit);color:var(--crit)">' + icon('info', 22) + '<div><b>Account Save Problem</b><div class="small">' + esc(account.error) + '</div></div></div>';
   if (!S.profile.name) h += '<div class="prof-cta">' + icon('steth', 22) + '<div><b>Create Your Doctor Profile</b><div class="small">Pick your name, scrub color and dream specialty. Earn XP and rank up from Medical Student to Chief of the ER.</div></div><button class="btn btn-primary btn-sm" data-go="#/profile">Set Up Profile</button></div>';
   h += sorted.length ? '<div class="grid">' + sorted.map(card).join('') + '</div>' : '<div class="panel empty">No active patients. <button class="btn btn-primary" data-go="#/library">Admit a Patient</button></div>';
   if (closed.length) h += '<h2 class="section-h">Completed cases</h2><div class="grid">' + closed.map(card).join('') + '</div>';
@@ -1051,6 +1158,8 @@ function renderModal() {
     }
   } else if (m.type === 'confirm') {
     inner = '<div class="modal-h"><h2>' + esc(m.title) + '</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' + esc(m.text) + '</div><div class="modal-f"><button class="btn" data-act="close">Cancel</button><button class="btn btn-danger" data-act="confirm-yes">' + esc(m.yes) + '</button></div>';
+  } else if (m.type === 'signin') {
+    inner = signinModalHtml();
   } else if (m.type === 'settings') {
     const sw = (key, title, sub) => '<div class="switch"><div><b>' + title + '</b><small>' + sub + '</small></div><input type="checkbox" data-setting="' + key + '"' + (S.settings[key] ? ' checked' : '') + ' style="width:22px;height:22px"></div>';
     inner = '<div class="modal-h"><h2>Simulation Settings</h2><button class="x" data-act="close">×</button></div><div class="modal-b">' +
@@ -1126,6 +1235,9 @@ document.addEventListener('click', e => {
     case 'reset': if (p) { ui.modal = { type: 'confirm', title: 'Restart Patient ' + p.num + '\'s Case?', text: 'This erases this patient\'s record and returns them to where their case began in this simulation. Other patients are not affected.', yes: 'Restart Case', fn: () => { resetPatient(p); render(); } }; renderModal(); } break;
     case 'new-sim': ui.menu = null; ui.modal = { type: 'confirm', title: 'Start a New Simulation?', text: 'Your current shift (Shift #' + (S.shiftNo || 1) + ') will be saved in Past Shifts, where you can reopen every patient\'s record. A new shift then starts with the four starting patients. Your profile, career stats and education progress are kept.', yes: 'End Shift & Start New', fn: () => { archiveShift(); const keep = { edu: S.edu, career: S.career, profile: S.profile, settings: S.settings, history: S.history, shiftNo: (S.shiftNo || 1) + 1 }; newState(); Object.assign(S, keep); save(); go('#/'); } }; render(); break;
     case 'confirm-yes': { const fn = ui.modal && ui.modal.fn; ui.modal = null; if (fn) fn(); else render(); break; }
+    case 'signin': ui.menu = null; ui.signin = null; ui.modal = { type: 'signin' }; render(); setTimeout(() => { const el = document.getElementById('si-user'); if (el) el.focus(); }, 30); break;
+    case 'signin-go': doSignIn(); break;
+    case 'signout': ui.menu = null; renderTop(); signOut(); break;
     case 'close': ui.modal = null; renderModal(); break;
     case 'close-bg': if (e.target === t) { ui.modal = null; renderModal(); } break;
     case 'settings': ui.menu = null; ui.modal = { type: 'settings' }; render(); break;
@@ -1214,4 +1326,6 @@ window.addEventListener('hashchange', () => route(location.hash));
 window.ER = { get state() { return S; }, advanceTime: m => { advanceTime(m); save(); render(); }, CASES: CASES };
 route();
 initCloud();
+initAccounts();
+document.addEventListener('keydown', e => { if (e.key === 'Enter' && ui.modal && ui.modal.type === 'signin' && e.target && (e.target.id === 'si-user' || e.target.id === 'si-pass')) { e.preventDefault(); doSignIn(); } });
 })();
