@@ -709,3 +709,8 @@ button.term:hover,button.term:focus-visible{background:var(--blue-soft)}
 .or-ticon{width:64px;height:40px}
 @keyframes or-pass{0%{transform:scale(1)}40%{transform:translateY(-14px) scale(1.08)}100%{transform:none}}
 @media (prefers-reduced-motion:reduce){.or-tool.passed{animation:none}.or-tool{transition:none}}
+.lb-sort{margin-left:auto;display:inline-flex;gap:6px}
+.lb-sort .btn.on{background:var(--navy,#0b2545);color:#fff;border-color:transparent}
+.acc-bonus{background:#f4f7fb;border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:12px 0}
+.acc-bonus>div:first-child{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.acc-bonus .mono{font-weight:700;color:#0f6b4f}

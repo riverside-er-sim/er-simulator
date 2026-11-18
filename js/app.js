@@ -1027,7 +1027,7 @@ function scoreDaily(p, outcome) {
 /* ───────── Family leaderboard (public website, signed-in players only) ───────── */
 function lbEntry() {
   const r = PROFILE.rank(S), c = S.career, tot = c.correct + c.incorrect, today = dateStr(), d = S.daily[today];
-  return { name: S.profile.name ? 'Dr. ' + S.profile.name : (account ? account.username : 'Doctor'), xp: r.xp, rank: r.name, accuracy: tot ? Math.round(100 * c.correct / tot) : null,
+  return { name: S.profile.name ? 'Dr. ' + S.profile.name : (account ? account.username : 'Doctor'), xp: r.xp, rank: r.name, accuracy: tot ? Math.round(100 * c.correct / tot) : null, decisions: tot,
     discharged: c.discharged || 0, dailyDate: d && d.done ? today : '', dailyScore: d && d.done ? d.score : null, streak: c.dailyStreak || 0, color: S.profile.color || '#1d5fbf', icon: S.profile.icon || 'steth' };
 }
 function pushLeaderboard() {
@@ -1053,11 +1053,15 @@ function viewLeaderboard() {
   if (!ui.lb) return h + mine + '<div class="panel empty">Loading the leaderboard…</div>';
   if (ui.lb.error) return h + mine + '<div class="panel empty">The leaderboard isn\'t available right now (' + esc(ui.lb.error) + '). Try again later.</div>';
   const rows = ui.lb.rows.slice();
-  const row = (r, i, val) => '<tr class="' + (r.uid === account.uid ? 'me' : '') + '"><td class="lb-pos">' + (i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1) + '</td><td><span class="lb-doc"><span class="tb-av" style="--pc:' + esc(r.color || '#1d5fbf') + '">' + icon(r.icon || 'steth', 16) + '</span><b>' + esc(r.name || 'Doctor') + '</b>' + (r.uid === account.uid ? ' <span class="small muted">(you)</span>' : '') + '</span></td>' + val + '</tr>';
-  const byXp = rows.slice().sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  const row = (r, i, val) => '<tr class="' + (r.uid === account.uid ? 'me' : '') + '"><td class="lb-pos">' + (i < 0 ? '—' : i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1) + '</td><td><span class="lb-doc"><span class="tb-av" style="--pc:' + esc(r.color || '#1d5fbf') + '">' + icon(r.icon || 'steth', 16) + '</span><b>' + esc(r.name || 'Doctor') + '</b>' + (r.uid === account.uid ? ' <span class="small muted">(you)</span>' : '') + '</span></td>' + val + '</tr>';
+  const LB_MIN = 20, byAcc = ui.lbSort === 'acc';
+  const ok = r => (r.decisions || 0) >= LB_MIN && r.accuracy != null;
+  const byXp = byAcc ? rows.filter(ok).sort((a, b) => b.accuracy - a.accuracy || (b.decisions || 0) - (a.decisions || 0)).concat(rows.filter(r => !ok(r)).sort((a, b) => (b.decisions || 0) - (a.decisions || 0)))
+    : rows.slice().sort((a, b) => (b.xp || 0) - (a.xp || 0));
+  const accCell = r => byAcc && !ok(r) ? '<span class="muted small">needs ' + (LB_MIN - (r.decisions || 0)) + ' more decisions</span>' : (r.accuracy == null ? '—' : (byAcc ? '<b>' + r.accuracy + '%</b>' : r.accuracy + '%'));
   const today = dateStr(), daily = rows.filter(r => r.dailyDate === today && r.dailyScore != null).sort((a, b) => b.dailyScore - a.dailyScore);
-  h += mine + '<section class="panel" style="margin-bottom:16px"><div class="panel-title">🏆 Overall</div><div class="tbl-wrap"><table class="labs lb"><thead><tr><th></th><th>Doctor</th><th>Rank</th><th>XP</th><th>Accuracy</th><th>Discharged</th><th>Streak</th></tr></thead><tbody>' +
-    byXp.map((r, i) => row(r, i, '<td>' + esc(r.rank || '') + '</td><td class="mono"><b>' + (r.xp || 0) + '</b></td><td>' + (r.accuracy == null ? '—' : r.accuracy + '%') + '</td><td>' + (r.discharged || 0) + '</td><td>' + ((r.streak || 0) ? '🔥 ' + r.streak : '—') + '</td>')).join('') + '</tbody></table></div></section>';
+  h += mine + '<section class="panel" style="margin-bottom:16px"><div class="panel-title">🏆 Overall<span class="lb-sort"><button class="btn btn-sm' + (byAcc ? '' : ' on') + '" data-act="lb-sort" data-v="xp" aria-pressed="' + !byAcc + '">By XP</button><button class="btn btn-sm' + (byAcc ? ' on' : '') + '" data-act="lb-sort" data-v="acc" aria-pressed="' + byAcc + '">By Accuracy</button></span></div>' + (byAcc ? '<p class="small muted" style="margin:0 0 8px">Ranked by the share of decisions made correctly. You need ' + LB_MIN + ' decisions to be ranked.</p>' : '') + '<div class="tbl-wrap"><table class="labs lb"><thead><tr><th></th><th>Doctor</th><th>Rank</th><th>XP</th><th>Accuracy</th><th>Discharged</th><th>Streak</th></tr></thead><tbody>' +
+    byXp.map((r, i) => row(r, byAcc && !ok(r) ? -1 : i, '<td>' + esc(r.rank || '') + '</td><td class="mono">' + (byAcc ? (r.xp || 0) : '<b>' + (r.xp || 0) + '</b>') + '</td><td>' + accCell(r) + '</td><td>' + (r.discharged || 0) + '</td><td>' + ((r.streak || 0) ? '🔥 ' + r.streak : '—') + '</td>')).join('') + '</tbody></table></div></section>';
   const dc = dailyCase(today);
   h += '<section class="panel"><div class="panel-title">' + icon('clock', 18) + 'Today\'s Case: ' + esc(dc.title) + '</div>' +
     (daily.length ? '<div class="tbl-wrap"><table class="labs lb"><thead><tr><th></th><th>Doctor</th><th>Score</th></tr></thead><tbody>' + daily.map((r, i) => row(r, i, '<td class="mono"><b>' + r.dailyScore + '</b> pts</td>')).join('') + '</tbody></table></div>'
@@ -1761,6 +1765,7 @@ document.addEventListener('click', e => {
     case 'triage-submit': if (p) { submitTriage(p); save(); render(); window.scrollTo(0, 0); } break;
     case 'triage-continue': if (p) { p.triageFb = null; save(); render(); window.scrollTo(0, 0); } break;
     case 'daily-start': { const today = dateStr(); if (S.daily[today]) break; const dc = dailyCase(today); const np = admitCase(dc.id, false); np.daily = today; S.daily[today] = { pid: np.id, caseId: dc.id }; rec(np, 'update', 'Case of the Day for ' + today + '.'); save(); enterRoom(np.id); break; }
+    case 'lb-sort': ui.lbSort = t.getAttribute('data-v'); ui.keepScroll = true; render(); break;
     case 'lb-refresh': ui.lb = null; ui.lbLast = null; render(); break;
     case 'dx-open': if (p) { ui.modal = { type: 'dx', id: p.id }; renderModal(); } break;
     case 'dx-pick': if (p) { ui.dxSel = ui.dxSel || {}; ui.dxSel[p.id] = +t.getAttribute('data-i'); renderModal(); } break;
