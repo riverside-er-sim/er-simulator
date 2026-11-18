@@ -696,3 +696,16 @@ button.term:hover,button.term:focus-visible{background:var(--blue-soft)}
 @media (max-width:560px){.or-to-row{flex-direction:column;align-items:stretch}.or-to-btns{justify-content:flex-end}}
 @media (prefers-reduced-motion:reduce){.lab-rub,.lab-drip,.lab-breathe,.lab-step.hint{animation:none}}
 .or-list{margin:0;padding-left:22px;columns:2;font-size:14px}
+.or-ask{background:#eef6ff;border:1px solid #c7dcf5;border-radius:12px;padding:10px 12px;font-size:15px;font-weight:600}
+.or-who{display:block;font-size:11px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#1d5fbf;margin-bottom:2px}
+.or-hint{margin:6px 0 8px}
+.or-instr{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}
+.or-tool{display:flex;flex-direction:column;align-items:center;gap:4px;background:#fff;border:1.5px solid var(--line);border-radius:12px;padding:8px 6px;font-size:12.5px;font-weight:700;color:inherit;cursor:pointer;transition:transform .12s,box-shadow .12s}
+.or-tool:hover:not([disabled]){transform:translateY(-2px);box-shadow:0 4px 10px rgba(15,40,80,.12)}
+.or-tool[disabled]{cursor:default}
+.or-tool.bad{opacity:.45;outline:2px solid var(--crit)}
+.or-tool.ok{outline:2px solid var(--stab);background:#e6f4ee}
+.or-tool.passed{animation:or-pass .5s ease-out}
+.or-ticon{width:64px;height:40px}
+@keyframes or-pass{0%{transform:scale(1)}40%{transform:translateY(-14px) scale(1.08)}100%{transform:none}}
+@media (prefers-reduced-motion:reduce){.or-tool.passed{animation:none}.or-tool{transition:none}}

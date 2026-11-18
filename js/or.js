@@ -1,4 +1,4 @@
-/* Operating Room: the player leads the team's SAFETY work around an operation —
+/* Operating Room: the player is the scrub nurse — hands the surgeon instruments and leads the team's SAFETY work —
    consent, safety time-out, sterile tray, watching the monitor, the count, and recovery.
    The surgery itself is a non-graphic cartoon; no technique, no medicine doses. */
 (function () {
@@ -87,6 +87,38 @@ const CONTAM = [
     { t: 'Use only the gauze farthest from the tear', ok: false, fb: 'You can\'t tell which pieces stayed sterile. Open a new pack.' }] }
 ];
 
+/* Instruments the player hands to the surgeon (names and jobs only — no technique) */
+const IC = {
+  scalpel: '<rect x="4" y="17" width="34" height="6" rx="3" fill="#90a4ae"/><path d="M38 18 L56 15 Q60 20 52 23 L38 22 Z" fill="#e3e9ec" stroke="#607d8b"/>',
+  scissors: '<circle cx="10" cy="12" r="6" fill="none" stroke="#78909c" stroke-width="3"/><circle cx="10" cy="28" r="6" fill="none" stroke="#78909c" stroke-width="3"/><path d="M15 15 L58 25 M15 25 L58 15" stroke="#90a4ae" stroke-width="4" stroke-linecap="round"/>',
+  clamp: '<circle cx="10" cy="12" r="6" fill="none" stroke="#78909c" stroke-width="3"/><circle cx="10" cy="28" r="6" fill="none" stroke="#78909c" stroke-width="3"/><path d="M15 15 L44 19 L60 20 M15 25 L44 21 L60 20" stroke="#90a4ae" stroke-width="4" fill="none" stroke-linejoin="round"/><path d="M21 15 v10 M25 16 v8" stroke="#546e7a" stroke-width="1.5"/><path d="M46 20 H60" stroke="#455a64" stroke-width="5" stroke-dasharray="1.5 1.5"/>',
+  forceps: '<path d="M6 20 L58 13 M6 20 L58 27" stroke="#90a4ae" stroke-width="4" stroke-linecap="round"/><path d="M22 15 v3 M26 14.5 v3 M22 22 v3 M26 22.5 v3" stroke="#546e7a" stroke-width="1.5"/>',
+  retractor: '<path d="M6 12 H44 Q52 12 52 20 V30" stroke="#90a4ae" stroke-width="6" fill="none" stroke-linecap="round"/><path d="M46 32 H60" stroke="#90a4ae" stroke-width="6" stroke-linecap="round"/>',
+  suction: '<path d="M4 34 Q10 34 14 28" stroke="#4fc3f7" stroke-width="4" fill="none"/><path d="M14 28 L44 14 Q54 10 58 18" stroke="#b0bec5" stroke-width="6" fill="none" stroke-linecap="round"/>',
+  stitches: '<path d="M6 14 L40 20 M6 26 L40 20" stroke="#90a4ae" stroke-width="4" stroke-linecap="round"/><path d="M40 20 H48" stroke="#607d8b" stroke-width="5"/><path d="M46 10 A10 10 0 0 1 56 26" stroke="#78909c" stroke-width="2" fill="none"/><path d="M56 26 Q50 35 40 35 Q30 35 26 31" stroke="#7e57c2" stroke-width="1.5" fill="none"/>',
+  gauze: '<rect x="18" y="6" width="28" height="28" rx="3" fill="#fff" stroke="#b0bec5"/><path d="M18 15 H46 M18 25 H46 M27 6 V34 M37 6 V34" stroke="#e0e0e0"/><path d="M22 30 h10" stroke="#1d5fbf" stroke-width="2"/>',
+  camera: '<rect x="4" y="15" width="14" height="12" rx="3" fill="#455a64"/><rect x="18" y="19" width="38" height="4" rx="2" fill="#b0bec5"/><circle cx="57" cy="21" r="3.5" fill="#fff59d" stroke="#fbc02d"/><path d="M8 27 Q4 33 10 37" stroke="#263238" stroke-width="2" fill="none"/>',
+  grasper: '<path d="M5 13 L12 21 M5 29 L12 21" stroke="#455a64" stroke-width="4" stroke-linecap="round"/><rect x="12" y="19" width="40" height="4" rx="2" fill="#b0bec5"/><path d="M52 21 L60 16 M52 21 L60 26" stroke="#607d8b" stroke-width="3" stroke-linecap="round"/>',
+  implant: '<circle cx="46" cy="15" r="10" fill="#e3e9ec" stroke="#78909c" stroke-width="2"/><path d="M40 22 L14 34" stroke="#b0bec5" stroke-width="7" stroke-linecap="round"/>',
+  cautery: '<rect x="14" y="16" width="34" height="8" rx="4" fill="#fdd835" stroke="#f9a825"/><path d="M48 20 H60" stroke="#90a4ae" stroke-width="2"/><path d="M14 20 Q4 20 4 34" stroke="#263238" stroke-width="2" fill="none"/>'
+};
+const INSTR = {
+  scalpel: ['Scalpel', 'a small, very sharp knife for making the cut'],
+  scissors: ['Surgical scissors', 'for cutting stitches and soft tissue'],
+  clamp: ['Clamp', 'it locks shut to squeeze a blood vessel closed'],
+  forceps: ['Forceps', 'surgical tweezers for gently holding things'],
+  retractor: ['Retractor', 'it holds the opening wide so the surgeon can see'],
+  suction: ['Suction', 'a little vacuum that clears away fluid and blood'],
+  stitches: ['Needle holder + stitches', 'for sewing the cut closed'],
+  gauze: ['Gauze sponge', 'soaks up fluid (the blue strip shows up on X-ray)'],
+  camera: ['Keyhole camera', 'a thin camera with a light, for keyhole surgery'],
+  grasper: ['Keyhole grabber', 'a long, thin tool that holds things through a keyhole'],
+  implant: ['Hip implant', 'the new metal ball for the hip'],
+  cautery: ['Cautery pen', 'an electric pen that seals tiny bleeding spots with heat']
+};
+const SHARP = 'Sharp tools are set down in a small tray (the "neutral zone") instead of hand to hand, so nobody gets cut.';
+function toolIcon(k) { return '<svg class="or-ticon" viewBox="0 0 64 40" aria-hidden="true">' + IC[k] + '</svg>'; }
+
 const CFG = {
   'core-appendicitis': {
     after: 2, organ: 'appendix', zone: 'RLQ', art: artAppendix,
@@ -94,6 +126,13 @@ const CFG = {
     site: 'Lower right belly', wrongSite: 'Lower left belly',
     equip: 'Keyhole camera checked and working', wrongEquip: 'Keyhole camera not checked yet',
     tray: [['Keyhole camera', true]],
+    op: ['f0', 'camera', 'f1', 'event', 'grasper', 'suction', 'f2', 'anat', 'stitches', 'f3'],
+    asks: {
+      camera: 'I need to see inside his belly through a tiny keyhole.',
+      grasper: 'I see the appendix! I need something long and thin to hold it gently.',
+      suction: 'There\'s some infected fluid here. Can you help me clear it away?',
+      stitches: 'All done inside. Time to close the tiny cuts!'
+    },
     preop: [
       { q: 'Before surgery, the surgeon talks with him and his parent. Which explanation is best?', opts: [
         { t: 'In plain words: what the operation is, why it\'s needed, the main risks like bleeding and infection, other options — then answer their questions', ok: true, fb: 'Yes! That\'s "informed consent": the patient (and, for a teen, a parent) understands before agreeing.' },
@@ -138,6 +177,14 @@ const CFG = {
     site: 'Left upper belly (spleen)', wrongSite: 'Right upper belly (liver)',
     equip: 'Blood for transfusion ready in the room', wrongEquip: 'Blood not ready yet',
     tray: [['Suction', true]],
+    op: ['f0', 'scalpel', 'f1', 'suction', 'retractor', 'event', 'clamp', 'f2', 'anat', 'stitches', 'f3'],
+    asks: {
+      scalpel: 'We need to move fast. I\'m ready to make the cut.',
+      suction: 'There\'s blood everywhere and I can\'t see. Clear it away!',
+      retractor: 'Hold the opening wide so I can reach the spleen.',
+      clamp: 'I need to squeeze the spleen\'s blood vessels shut.',
+      stitches: 'The bleeding has stopped. Let\'s close up.'
+    },
     preop: [
       { q: 'He\'s bleeding inside and getting worse. There isn\'t time for a long talk. What about consent?', opts: [
         { t: 'Briefly explain he\'s bleeding inside and needs an operation now, and ask for his OK', ok: true, fb: 'Right. He\'s awake and understands, so he still decides — the talk is just short. If a patient couldn\'t understand and no family could be reached, the team could go ahead to save their life.' },
@@ -182,6 +229,13 @@ const CFG = {
     site: 'RIGHT hip — marked by the surgeon', wrongSite: 'LEFT hip',
     equip: 'New hip implant (sterile pack) in the room', wrongEquip: 'Hip implant still in the storeroom',
     tray: [['Hip implant (sterile pack, opened when needed)', true]],
+    op: ['f0', 'scalpel', 'f1', 'retractor', 'event', 'implant', 'f2', 'anat', 'stitches', 'f3'],
+    asks: {
+      scalpel: 'Time-out is done and her right hip is marked. I\'m ready to make the cut.',
+      retractor: 'Hold the muscles apart so I can see the broken hip.',
+      implant: 'The broken ball is out. Please open the new one and pass it to me.',
+      stitches: 'The new hip is in place. Time to close!'
+    },
     preop: [
       { q: 'She\'s 84. Earlier she was a little confused, but now she\'s alert and understands what\'s happening. Who gives consent for her operation?', opts: [
         { t: 'She does — explain clearly, check she understands, and include her family if she wants', ok: true, fb: 'Yes! Being older doesn\'t take away someone\'s right to decide. If she understands the choice, it\'s hers to make.' },
@@ -228,7 +282,8 @@ function open(opts) {
   const cfg = CFG[opts.p.caseId]; if (!cfg) return;
   const root = document.createElement('div'); root.id = 'or-root'; root.className = 'cpr-bg'; root.setAttribute('role', 'dialog'); root.setAttribute('aria-modal', 'true');
   document.body.appendChild(root);
-  st = { opts: opts, cfg: cfg, p: opts.p, root: root, stage: -1, step: 0, scores: [], sub: {}, msg: '', msgKind: '' };
+  const need = Object.keys(cfg.asks), extra = shuffle(Object.keys(INSTR).filter(k => need.indexOf(k) < 0));
+  st = { opts: opts, cfg: cfg, p: opts.p, root: root, stage: -1, step: 0, scores: [], sub: {}, msg: '', msgKind: '', tools: shuffle(need.concat(extra.slice(0, Math.max(0, 8 - need.length)))) };
   draw();
   document.addEventListener('keydown', onKey, true);
   root.addEventListener('click', onClick);
@@ -272,7 +327,7 @@ function plan(stage) {
     case 0: return c.preop.map(d => ({ kind: 'quiz', def: d }));
     case 1: return [{ kind: 'timeout' }];
     case 2: return [{ kind: 'tray' }, { kind: 'quiz', def: CONTAM[Math.floor(Math.random() * CONTAM.length)] }];
-    case 3: return [{ kind: 'memory' }, { kind: 'frame', f: 0 }, { kind: 'frame', f: 1 }, { kind: 'event' }, { kind: 'frame', f: 2 }, { kind: 'anat' }, { kind: 'frame', f: 3 }];
+    case 3: return [{ kind: 'memory' }].concat(c.op.map(k => /^f\d$/.test(k) ? { kind: 'frame', f: +k[1] } : k === 'event' || k === 'anat' ? { kind: k } : { kind: 'pass', tool: k }));
     case 4: return [{ kind: 'count' }, { kind: 'quiz', def: countQuiz() }];
     case 5: return c.recovery.map(d => ({ kind: 'quiz', def: d, mon: true }));
   }
@@ -295,6 +350,7 @@ function enterStep() {
   if (s.kind === 'memory') setupCount();
   if (s.kind === 'anat') st.anat = null;
   if (s.kind === 'count') st.countPick = null;
+  if (s.kind === 'pass') st.pass = { tried: [], ok: false };
   draw();
 }
 function nextStep() {
@@ -304,6 +360,7 @@ function nextStep() {
   if (s.kind === 'timeout') { st.stagePts += st.to.right / st.to.items.length * 2; st.stageMax += 2; }
   if (s.kind === 'tray') { st.stagePts += st.tray.right / st.tray.items.length * 2; st.stageMax += 2; }
   if (s.kind === 'count') { st.stagePts += st.countPick === st.missing ? 1 : 0; st.stageMax += 1; }
+  if (s.kind === 'pass') { st.stagePts += st.pass.tried.length ? 0 : 1; st.stageMax += 1; }
   st.step++; enterStep();
 }
 
@@ -361,6 +418,10 @@ function onClick(e) {
   else if (a === 'tray-tog') { const i = +b.getAttribute('data-i'); if (!st.tray.checked) { st.tray.items[i].on = !st.tray.items[i].on; draw(); } }
   else if (a === 'tray-check') { st.tray.checked = true; st.tray.right = st.tray.items.filter(x => x.on === x.sterile).length; st.msg = st.tray.right === st.tray.items.length ? 'Perfect — only sterile items on the sterile tray.' : 'Only sterile items belong on the sterile tray. Anything else could carry germs into the wound.'; st.msgKind = st.tray.right === st.tray.items.length ? 'ok' : 'bad'; draw(); }
   else if (a === 'tap') { if (st.anat) return; st.anat = b.getAttribute('data-z'); const ok = st.anat === st.cfg.zone; st.msg = ok ? 'Correct! Remember: when you face a patient, their right side is on your left.' : 'Not quite. The ' + st.cfg.organ + ' is highlighted in green. When you face a patient, their right side is on your left.'; st.msgKind = ok ? 'ok' : 'bad'; draw(); }
+  else if (a === 'pass') { const ps = st.pass, k = b.getAttribute('data-t'), want = st.steps[st.step].tool; if (!ps || ps.ok || ps.tried.indexOf(k) >= 0) return;
+    if (k === want) { ps.ok = true; st.msg = '"Thank you!" ' + INSTR[k][0] + ': ' + INSTR[k][1] + '.' + (k === 'scalpel' ? ' ' + SHARP : ''); st.msgKind = 'ok'; }
+    else { ps.tried.push(k); st.msg = 'That\'s the ' + INSTR[k][0].toLowerCase() + ': ' + INSTR[k][1] + '. Try again!'; st.msgKind = 'bad'; }
+    draw(); }
   else if (a === 'count-pick') { if (st.countPick) return; st.countPick = b.getAttribute('data-v'); const ok = st.countPick === st.missing; st.msg = ok ? (st.missing === 'none' ? 'Correct — everything is accounted for.' : 'Great memory! One of the ' + st.missing.toLowerCase() + ' is missing. The team stops and searches — and finds it tucked under a drape.') : (st.missing === 'none' ? 'Actually, everything was there — the count was correct.' : 'Look again: one of the ' + st.missing.toLowerCase() + ' was missing. The team searches and finds it under a drape.'); st.msgKind = ok ? 'ok' : 'bad'; draw(); }
 }
 
@@ -380,7 +441,7 @@ function draw() {
   let body = '';
   if (st.stage < 0) {
     body = '<h2 class="lab-title">Operating Room</h2>' + scene(p) + '<p class="cpr-lead"><b>Patient ' + p.num + '</b> needs: ' + esc(c.proc) + '.</p>' +
-      '<p>The surgeon does the operation. <b>Your job is to keep the patient safe</b>: talk with the patient, run the safety checks, keep everything sterile, watch the monitor, count the instruments and look after recovery.</p>' +
+      '<p>You\'re the <b>scrub nurse</b>. The surgeon does the operation, and you hand over the right instruments when asked. <b>Your other big job is keeping the patient safe</b>: talk with the patient, run the safety checks, keep everything sterile, watch the monitor, count the instruments and look after recovery.</p>' +
       '<ol class="or-list">' + STAGES.map(s => '<li>' + esc(s) + '</li>').join('') + '</ol>' +
       '<div class="cpr-actions"><button class="btn" data-or="quit">Not Now</button><button class="btn btn-primary btn-lg or-go" data-or="start">Scrub In</button></div>';
   } else if (st.stage >= STAGES.length) {
@@ -418,6 +479,12 @@ function draw() {
       body += '<p class="lab-q">Before the first cut, the nurses count everything out loud. <b>Memorize the count</b> — you\'ll need it at the end!</p><div class="or-count">' + st.count.map(x => '<div><b>' + x.n + '</b>' + esc(x.name) + '</div>').join('') + '</div>' + next('I\'ve Got It — Start the Operation →');
     } else if (s.kind === 'frame') {
       body += c.art(s.f) + '<p class="or-frame">' + esc(c.frames[s.f]) + '</p>' + monitorHtml() + next();
+    } else if (s.kind === 'pass') {
+      const ps = st.pass;
+      body += '<div class="or-ask"><span class="or-who">Surgeon</span>"' + esc(c.asks[s.tool]) + '"</div><p class="small muted or-hint">You\'re the scrub nurse. Tap the instrument to hand over.</p><div class="or-instr">' + st.tools.map(k => {
+        const cls = ps.ok && k === s.tool ? ' ok passed' : ps.tried.indexOf(k) >= 0 ? ' bad' : '';
+        return '<button class="or-tool' + cls + '" data-or="pass" data-t="' + k + '"' + (ps.ok || ps.tried.indexOf(k) >= 0 ? ' disabled' : '') + '>' + toolIcon(k) + '<span>' + esc(INSTR[k][0]) + '</span></button>';
+      }).join('') + '</div>' + msg + (ps.ok ? next() : '');
     } else if (s.kind === 'anat') {
       body += '<p class="lab-q">Quick anatomy check: tap where the <b>' + esc(c.organ) + '</b> is on the patient lying in front of you.</p>' + bodyMap(c.zone, st.anat) + msg + (st.anat ? next() : '');
     } else if (s.kind === 'count') {
